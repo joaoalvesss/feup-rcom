@@ -111,7 +111,7 @@ int main(int argc, char *argv[])
 
     while(STOP == FALSE){
         int bytes = read(fd, buf_r, BUF_SIZE);
-        printf("%d Bytes read:\n", bytes);
+        printf("Bytes read: %d \n", bytes);
 
         if(bytes != 0)
             STOP = TRUE;

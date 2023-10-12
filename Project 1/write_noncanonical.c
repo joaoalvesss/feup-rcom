@@ -27,7 +27,8 @@
 #define BCC             A^C
 #define BCC_UA          A_UA^C_UA
 
-typedef enum state_machine {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DONE} state_machine;
+typedef enum states {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DONE} states;
+typedef struct state_machine { unsigned char adressByte; states cur_state;  } state_machine;
 
 volatile int STOP = FALSE;
 int timeout = 3;
@@ -43,8 +44,70 @@ void alarmHandler(int signal)
     //printf("Alarm #%d\n", alarmCount);
 }
 
-int sendFrame(unsigned char* buffer, int n, int fd){
+void state_transition(state_machine* st, unsigned char* buffer, int len){
+    // unsigned char A, C;
 
+    for (int i = 0; i < len; i++){
+        char trans = buffer[i];
+        
+        switch(st->cur_state){
+
+            case START:
+                if (trans == FLAG){
+                    st->cur_state = FLAG_RCV;
+                    continue;
+                }
+                continue;
+            case FLAG_RCV:
+                if (trans == FLAG) continue;
+                if (trans == st->adressByte){
+                    st->cur_state = A_RCV;
+                    continue;
+                }
+                st->cur_state = START;
+                continue;
+            case A_RCV:
+                if (trans == FLAG){
+                    st->cur_state = FLAG_RCV;
+                    continue;
+                }
+                else if (trans == C){
+                    st->cur_state = C_RCV;
+                    continue;
+                }
+                st->cur_state = START;
+                continue;
+
+            case C_RCV:
+                if (trans == FLAG){
+                    st->cur_state = FLAG_RCV;
+                    continue;
+                }
+                else if (trans == BCC){
+                    st->cur_state = BCC_OK;
+                    continue;
+                }
+                st->cur_state = START;
+                continue;
+            
+            case BCC_OK:
+                if (trans == FLAG){
+                    printf("Right condition!");
+                    st->cur_state = DONE;
+                    continue;
+                }
+                printf("Something gone wrong\n");
+                st->cur_state = START;
+                continue;
+
+            default:
+                continue;
+
+        }
+    }
+}
+
+int sendFrame(unsigned char* buffer, int n, int fd){
     int bytes = write(fd, buffer, n);
     if(bytes != n) printf("Error in writting bytes\n");
 
@@ -59,7 +122,8 @@ int sendFrame(unsigned char* buffer, int n, int fd){
 
     printf("bytes1=%d \n", bytes1);
 
-    alarm(0);   
+    alarm(0); 
+    alarmEnabled = FALSE;  
     if(bytes1 == 0) return 1;
 
     unsigned char buf2[BUF_SIZE] = {FLAG, A_UA, C_UA, BCC_UA, FLAG}; // compare buffer
@@ -103,7 +167,7 @@ int main(int argc, char *argv[])
     struct termios oldtio;
     struct termios newtio;
 
-    // Save current port settings
+    // Save cur port settings
     if (tcgetattr(fd, &oldtio) == -1)
     {
         perror("tcgetattr");
