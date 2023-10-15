@@ -13,32 +13,17 @@
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
-#define BAUDRATE B38400
-#define _POSIX_SOURCE 1 // POSIX compliant source
-
-#define FALSE 0
-#define TRUE 1
-
-#define BUF_SIZE 256
+#define BAUDRATE        B38400
+#define _POSIX_SOURCE   1 // POSIX compliant source
+#define FALSE           0
+#define TRUE            1
+#define BUF_SIZE        256
+#define FLAG            0x7E
+#define A_UA            0x01
+#define C_UA            0x07
+#define BCC_UA          A_UA^C_UA
 
 volatile int STOP = FALSE;
-
-#define FLAG    0x7E
-#define A_UA    0x01
-#define C_UA    0x07
-#define BCC     (A_UA^C_UA)
-/*
-void setFrame( unsigned char buf[], int n)
-    1) write
-    2) alarm(TIMEOUT)
-    3) read
-    4.1) Se recebi a trama return 0
-    4.2) Se nao return 1
-
-na main
-    while(setFrame) 
-    counter < MAX    
-*/
 
 int main(int argc, char *argv[])
 {
@@ -120,7 +105,7 @@ int main(int argc, char *argv[])
     buf_w[0] = FLAG;
     buf_w[1] = A_UA;
     buf_w[2] = C_UA;
-    buf_w[3] = BCC;
+    buf_w[3] = BCC_UA;
     buf_w[4] = FLAG;
     int bytes2 = write(fd, buf_w, BUF_SIZE);
 

@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/RCOM/code/src",
-      "program": "c:/RCOM/code/src/build/Debug/outDebug",
+      "cwd": "c:/RCOM/code",
+      "program": "c:/RCOM/code/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

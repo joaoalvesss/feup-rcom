@@ -46,32 +46,30 @@ void alarmHandler(int signal)
 
 void state_transition(state_machine* st, unsigned char* buffer, int len){
     // unsigned char A, C;
-
     for (int i = 0; i < len; i++){
-        char trans = buffer[i];
+        char cur_char = buffer[i];
         
         switch(st->cur_state){
-
             case START:
-                if (trans == FLAG){
+                if (cur_char == FLAG){
                     st->cur_state = FLAG_RCV;
                     continue;
                 }
                 continue;
             case FLAG_RCV:
-                if (trans == FLAG) continue;
-                if (trans == st->adressByte){
+                if (cur_char == FLAG) continue;
+                if (cur_char == st->adressByte){
                     st->cur_state = A_RCV;
                     continue;
                 }
                 st->cur_state = START;
                 continue;
             case A_RCV:
-                if (trans == FLAG){
+                if (cur_char == FLAG){
                     st->cur_state = FLAG_RCV;
                     continue;
                 }
-                else if (trans == C){
+                else if (cur_char == C){
                     st->cur_state = C_RCV;
                     continue;
                 }
@@ -79,11 +77,11 @@ void state_transition(state_machine* st, unsigned char* buffer, int len){
                 continue;
 
             case C_RCV:
-                if (trans == FLAG){
+                if (cur_char == FLAG){
                     st->cur_state = FLAG_RCV;
                     continue;
                 }
-                else if (trans == BCC){
+                else if (cur_char == BCC){
                     st->cur_state = BCC_OK;
                     continue;
                 }
@@ -91,8 +89,8 @@ void state_transition(state_machine* st, unsigned char* buffer, int len){
                 continue;
             
             case BCC_OK:
-                if (trans == FLAG){
-                    printf("Right condition!");
+                if (cur_char == FLAG){
+                    printf("Right condition");
                     st->cur_state = DONE;
                     continue;
                 }
@@ -130,7 +128,7 @@ int sendFrame(unsigned char* buffer, int n, int fd){
 
     for(int i = 0; i < bytes1; i++){
         if(buf2[i] != buf_r[i]){
-            printf("Error in recieve UA\n");
+            printf("Error in recieved UA\n");
             return 1;
         }
         printf("buf = 0x%02X\n", (unsigned int)(buf_r[i] & 0xFF));  
