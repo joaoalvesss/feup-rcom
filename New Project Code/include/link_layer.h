@@ -33,8 +33,7 @@ typedef struct
 
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
-#define MAX_PACKET_SIZE 256
-#define MAX_BUFFER_SIZE (MAX_PACKET_SIZE * 2 + 7)
+#define MAX_SIZE 256
 
 // MISC
 #define FALSE 0
@@ -51,15 +50,15 @@ typedef struct
 
 // SET buffer values
 #define FLAG 0x7E
-#define A_T 0x03
-#define A_R 0x01
+#define A_TRANSMITER 0x03
+#define A_RECEIVER 0x01
 #define C_SET 0x03
 #define C_UA 0x07
 #define BCC(a, c) (a^c) 
 #define DISC 0x0B
-#define RR(n) 0x05 | (n << 7) // 0 ou 1
-#define REJ(n) 0x01 | (n << 7) // 0 ou 1
-#define C_INF(n) 0x00 | (n << 6) // 0 ou 1
+#define RR(n) 0x05 | (n << 7)
+#define REJ(n) 0x01 | (n << 7)
+#define C_INFO(n) 0x00 | (n << 6)
 
 #define RR_R 0
 

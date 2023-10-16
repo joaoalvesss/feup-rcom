@@ -4,6 +4,8 @@
 #ifndef _APPLICATION_LAYER_H_
 #define _APPLICATION_LAYER_H_
 
+#define MAX_SIZE 256
+
 int transmitting(const char* file);
 
 int receiving(const char* file);
