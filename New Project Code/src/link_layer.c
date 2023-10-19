@@ -7,141 +7,168 @@
 
 struct termios oldtio;
 struct termios newtio;
+
 int alarmEnabled = FALSE;
 int alarmCount = 0;
+
 volatile int STOP = FALSE;
-int current_state = START;
-LinkLayer link_layer;
-int fd, bytes, answer = -1;
+
+int state = START;
+
+int fd;
+
+int bytes;
+
 unsigned char readbyte;
 
+int response = -1;
 
-void alarmHandler(int signal)
+LinkLayer layer;
+
+LinkLayerRole getRole()
 {
-    alarmEnabled = FALSE;
-    alarmCount++;
-    // printf("Alarm #%d\n", alarmCount);
+    return layer.role;
 }
 
-int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
-    if (!RR_REJ){ answer = -1; }
-        
+int getnTransmissions()
+{
+    return layer.nRetransmissions;
+}
+
+int getTimeOut()
+{
+    return layer.timeout;
+}
+
+int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ)
+{
+    if (!RR_REJ)
+        response = -1;
     unsigned char byte = 0;
+
+    int bytes = 0;
+
     bytes = read(fd, &byte, 1);
 
-    if (bytes > 0) {
-        // State: START
-        printf("> Reached START\n");
-        if (current_state == START) {
+    if (bytes > 0)
+    {
+        switch (state)
+        {
+        case START:
+            printf("START\n");
             if (byte == FLAG)
-                current_state  = FLAG_RCV;
-        }
-
-        // State: FLAG_RCV
-        if (current_state == FLAG_RCV) {
-            printf("> Reached FLAG_RCV\n");
+                state = FLAG_RCV;
+            break;
+        case FLAG_RCV:
+            printf("FLAG_RCV\n");
             if (byte == a)
-                current_state = A_RCV;
+                state = A_RCV;
             else if (byte != FLAG)
-                current_state = START;
-        }
-
-        // State: A_RCV
-        if (current_state == A_RCV) {
-            printf("> Reached A_RCV\n");
-            if (RR_REJ) {
-                switch (byte) {
-                    case RR(0):
-                        answer = RR0;
-                        current_state = C_RCV;
-                        break;
-                    case RR(1):
-                        answer = RR1;
-                        current_state = C_RCV;
-                        break;
-                    case REJ(0):
-                        answer = REJ0;
-                        current_state  = C_RCV;
-                        break;
-                    case REJ(1):
-                        answer = REJ1;
-                        current_state = C_RCV;
-                        break;
-                    default:
-                        current_state = START;
-                        break;
-                }
-            } else {
-                if (byte == c)
-                    current_state = C_RCV;
-                else if (byte == FLAG)
-                    current_state = FLAG_RCV;
-                else
-                    current_state = START;
-            }
-        }
-
-        // State: C_RCV
-        if (current_state  == C_RCV) {
-            printf("> Reached C_RCV\n");
-            switch (answer) {
-                case RR0:
-                    c = RR(0);
+                state = START;
+            break;
+        case A_RCV:
+            printf("A_RCV\n");
+            if (RR_REJ)
+            {
+                switch (byte)
+                {
+                case RR(0):
+                    response = RR0;
+                    state = C_RCV;
                     break;
-                case RR1:
-                    c = RR(1);
+                case RR(1):
+                    response = RR1;
+                    state = C_RCV;
                     break;
-                case REJ0:
-                    c = REJ(0);
+                case REJ(0):
+                    response = REJ0;
+                    state = C_RCV;
                     break;
-                case REJ1:
-                    c = REJ(1);
+                case REJ(1):
+                    response = REJ1;
+                    state = C_RCV;
                     break;
                 default:
+                    state = START;
                     break;
+                }
             }
-            printf("%d\n", answer);
-            if (byte == (a ^ c)) {
-                if (isData)
-                    current_state  = WAITING_DATA;
-                else
-                    current_state  = BCC_OK;
-            } else if (byte == FLAG)
-                current_state  = FLAG_RCV;
             else
-                current_state  = START;
-        }
-
-        // State: WAITING_DATA
-        if (current_state == WAITING_DATA) {
-            printf("> Waiting for mode data\n");
-            if (byte == FLAG) {
-                STOP = TRUE;
+            {
+                if (byte == c)
+                    state = C_RCV;
+                else if (byte == FLAG)
+                    state = FLAG_RCV;
+                else
+                    state = START;
             }
-        }
-
-        // State: BCC_OK
-        if (current_state == BCC_OK) {
-            printf("> Reached BCC_OK\n");
-            if (byte == FLAG) {
-                printf("> DONE\n\n");
+            break;
+        case C_RCV:
+            printf("C_RCV\n");
+            switch (response)
+            {
+            case RR0:
+                c = RR(0);
+                break;
+            case RR1:
+                c = RR(1);
+                break;
+            case REJ0:
+                c = REJ(0);
+                break;
+            case REJ1:
+                c = REJ(1);
+                break;
+            default:
+                break;
+            }
+            printf("%d\n", response);
+            if (byte == (a ^ c))
+            {
+                if (isData)
+                    state = WAITING_DATA;
+                else
+                    state = BCC_OK;
+            }
+            else if (byte == FLAG)
+                state = FLAG_RCV;
+            else
+                state = START;
+            break;
+        case WAITING_DATA:
+            printf("WAITING_DATA\n");
+            if (byte == FLAG)
+            {
                 STOP = TRUE;
-                current_state = START;
+                // alarm(0);
+            }
+            break;
+        case BCC_OK:
+            printf("BCC_OK\n");
+            if (byte == FLAG)
+            {
+                printf("STOP\n");
+                STOP = TRUE;
+                state = START;
                 if (c == C_UA)
                     alarm(0);
-            } else
-                current_state = START;
+            }
+            else
+                state = START;
+            break;
         }
-
-        // printf("%x\n", byte);
+        printf("%x\n", byte);
         readbyte = byte;
         return TRUE;
     }
+
     return FALSE;
 }
 
+int sendBuffer(unsigned char a, unsigned char c)
+{
 
-int sendBuffer(unsigned char a, unsigned char c){
+    // Create string to send
     unsigned char buf[5];
 
     buf[0] = FLAG;
@@ -153,38 +180,63 @@ int sendBuffer(unsigned char a, unsigned char c){
     return write(fd, buf, sizeof(buf));
 }
 
+// Alarm function handler
+void alarmHandler(int signal)
+{
+    alarmEnabled = FALSE;
+    alarmCount++;
+
+    printf("Alarm #%d\n", alarmCount);
+}
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    printf("> Started openning connection\n\n");
+    printf("HEY\n");
+    layer = connectionParameters;
+
     (void)signal(SIGALRM, alarmHandler);
 
     fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
 
-    if (fd < 0) {
+    if (fd < 0)
+    {
         perror(connectionParameters.serialPort);
         exit(-1);
     }
 
-    if (tcgetattr(fd, &oldtio) == -1) {
+    // Save current port settings
+    if (tcgetattr(fd, &oldtio) == -1)
+    {
         perror("tcgetattr");
         exit(-1);
     }
 
+    // Clear struct for new port settings
     memset(&newtio, 0, sizeof(newtio));
 
     newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
-    newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 30;
-    newtio.c_cc[VMIN] = 0;
 
+    // Set input mode (non-canonical, no echo,...)
+    newtio.c_lflag = 0;
+    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+
+    // VTIME e VMIN should be changed in order to protect with a
+    // timeout the reception of the following character(s)
+
+    // Now clean the line and activate the settings for the port
+    // tcflush() discards data written to the object referred to
+    // by fd but not transmitted, or data received but not read,
+    // depending on the value of queue_selector:
+    //   TCIFLUSH - flushes data received but not read.
     tcflush(fd, TCIOFLUSH);
 
-
+    // Set new port settings
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
     {
         perror("tcsetattr");
@@ -193,43 +245,56 @@ int llopen(LinkLayer connectionParameters)
 
     printf("New termios structure set\n");
 
-    bytes = 0;
-    LinkLayerRole role = connectionParameters.role;
-    int retransmissions = connectionParameters.nRetransmissions;
-    int timeout = connectionParameters.timeout;
+    // In non-canonical mode, '\n' does not end the writing.
+    // Test this condition by placing a '\n' in the middle of the buffer.
+    // The whole buffer must be sent even with the '\n'.
 
+    // Set alarm function handler
+
+    int bytes = 0;
+
+    // Wait until all bytes have been written to the serial port
     sleep(1);
 
     STOP = FALSE;
 
-    if (role == LlTx) {
-        while (!STOP && alarmCount < retransmissions) {
-            if (alarmEnabled == FALSE) {
-                bytes = sendBuffer(A_TRANSMITER, C_SET);
-                printf("> %d bytes written\n", bytes);
-                alarm(timeout);
+    switch (connectionParameters.role)
+    {
+    case LlTx:
+
+        while (STOP == FALSE && alarmCount < connectionParameters.nRetransmissions)
+        {
+            if (alarmEnabled == FALSE)
+            {
+
+                bytes = sendBuffer(A_T, C_SET);
+                printf("%d bytes written\n", bytes);
+                alarm(connectionParameters.timeout); // Set alarm to be triggered
                 alarmEnabled = TRUE;
-                current_state = START;
+                state = START;
             }
-            stateMachine(A_TRANSMITER, C_UA, 0, 0);
+
+            stateMachine(A_T, C_UA, 0, 0);
         }
         alarm(0);
-        if (alarmCount >= retransmissions) {
-            printf("> Maximum number of tries reached, error\n\n");
+
+        if (alarmCount >= layer.nRetransmissions)
+        {
+            printf("ERRO TIME OUT\n");
             return -1;
         }
-        printf("> llopen worked fine\n\n");
-    } 
-    else if (role == LlRx) {
-        while (!STOP) {
-            stateMachine(A_TRANSMITER, C_SET, 0, 0);
+        printf("LLOPEN OK\n");
+        break;
+    case LlRx:
+        while (STOP == FALSE)
+        {
+            stateMachine(A_T, C_SET, 0, 0);
         }
-        bytes = sendBuffer(A_TRANSMITER, C_UA);
-        printf("> Answer to llopen; %d bytes written\n\n", bytes);
-    } 
-    else {
-        printf("> Unknown error in role, llopen\n\n");
-        return -1;
+        bytes = sendBuffer(A_T, C_UA);
+        printf("RESPONSE TO LLOPEN TRANSMITER. %d bytes written\n", bytes);
+        break;
+    default:
+        break;
     }
 
     return 0;
@@ -239,117 +304,148 @@ int llopen(LinkLayer connectionParameters)
 // LLWRITE
 ////////////////////////////////////////////////
 
-int stuffing(const unsigned char *trama, unsigned char *trama_stuffed, int size)
+int stuffing(const unsigned char *msg, int newSize, unsigned char *stuffedMsg)
 {
-    printf("> Entered stuffing mechanism\n\n");
+    int size = 0;
 
-    int aux = 0;
-    trama_stuffed[aux++] = trama[0];
+    stuffedMsg[size++] = msg[0];
 
-    for(int i = 1; i < size; i++){
-        if((trama[i] == FLAG) || (trama[i] == ESCAPE)){
-            trama_stuffed[aux++] = ESCAPE;
-            trama_stuffed[aux++] = trama[i] ^ 0x20;
-            // printf("%x\n", trama_stuffed[aux-1]);
+    printf("\nSTUFFING\n");
+
+    printf("%x\n", stuffedMsg[size - 1]);
+
+    for (int i = 1; i < newSize; i++)
+    {
+        if (msg[i] == FLAG || msg[i] == ESCAPE)
+        {
+            stuffedMsg[size++] = ESCAPE;
+            printf("%x\n", stuffedMsg[size - 1]);
+            stuffedMsg[size++] = msg[i] ^ 0x20;
+            printf("%x\n", stuffedMsg[size - 1]);
         }
-        else{
-            trama_stuffed[aux++] = trama[i];
-            // printf("%x\n", trama_stuffed[aux-1]);
+        else
+        {
+            stuffedMsg[size++] = msg[i];
+            printf("%x\n", stuffedMsg[size - 1]);
         }
     }
 
-    printf("> Exiting stuffing mechanism\n\n");
-    return aux; // return do novo tamanho da trama após ser stuffed ou não
+    printf("\nEND STUFFING\n");
+
+    return size;
 }
 
-int destuffing(const unsigned char *trama, unsigned char *trama_destuffed, unsigned char *size)
+int destuffing(const unsigned char *msg, int newSize, unsigned char *destuffedMsg)
 {
-    printf("> Entered destuffing mechanism\n\n");
+    int size = 0;
 
-    int aux = 0;
-    trama_destuffed[aux++] = trama[0];
+    printf("\nDESTUFIING\n");
 
-    int cmp = (int) *size;
-    for(int i = 1; i < cmp; i++){
-        if(trama[i] == ESCAPE){
-            trama_destuffed[aux++] = trama[i+1] ^ 0x20;
-            // printf("%x\n", trama_stuffed[aux-1]);
+    destuffedMsg[size++] = msg[0];
+    printf("%x\n", destuffedMsg[size - 1]);
+
+    for (int i = 1; i < newSize; i++)
+    {
+        if (msg[i] == ESCAPE)
+        {
+            destuffedMsg[size++] = msg[i + 1] ^ 0x20;
+            printf("%x\n", destuffedMsg[size - 1]);
+            i++;
         }
-        else{
-            trama_destuffed[aux++] = trama[i];
-            // printf("%x\n", trama_stuffed[aux-1]);
+        else
+        {
+            destuffedMsg[size++] = msg[i];
+            printf("%x\n", destuffedMsg[size - 1]);
         }
     }
 
-    printf("> Exiting destuffing mechanism\n\n");
-    return aux; // return do novo tamanho da trama após ser destuffed ou não (tamanho original da trama)
+    printf("\nEND DESTUFIING\n");
+    printf("size: %d\n", size);
+
+    return size;
+}
+
+unsigned char calculateBCC2(const unsigned char *buf, int dataSize, int startingByte)
+{
+    if (dataSize < 0)
+    {
+        printf("Error buf Size: %d\n", dataSize);
+    }
+    unsigned char BCC2 = 0x00;
+    for (unsigned int i = startingByte; i < dataSize; i++)
+    {
+        BCC2 ^= buf[i];
+    }
+    printf("Calculate BCC2: %x\n", BCC2);
+    return BCC2;
 }
 
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    int last_rejected = FALSE;
-    int maxTries = link_layer.nRetransmissions;
-    int timeout = link_layer.timeout;
-    unsigned char trama_size = bufSize + 5; // flag, A, C, bcc1 e bcc2
+    int newSize = bufSize + 5; // FLAG + A + C + BCC1 + .... + BCC2 + FLAG
+
+    unsigned char msg[newSize];
+
     static int packet = 0;
-    unsigned char trama[trama_size];
 
-    // Construir a trama
-    trama[2] = C_INFO(packet); // C
-    trama[1] = A_TRANSMITER; // A
-    trama[0] = FLAG; // FLAG
-    trama[3] = BCC(trama[1], trama[2]); // BCC1
+    msg[0] = FLAG;
+    msg[1] = A_T;
+    msg[2] = C_INF(packet);
+    msg[3] = BCC(A_T, C_INF(packet));
 
-    // BCC2 
-    unsigned char bcc2 = buf[0];
-    for(int i = 0; i < bufSize; i++){
-        trama[i + 4] = buf[i]; // copiar do buffer para a trama que vamos enviar
-        if(i != 0){
-            bcc2 = bcc2 ^ buf[i];
-        }
+    unsigned char BCC2 = buf[0];
+    for (int i = 0; i < bufSize; i++)
+    {
+        msg[i + 4] = buf[i];
+        if (i > 0)
+            BCC2 ^= buf[i];
     }
-    trama[bufSize + 4] = bcc2;
 
-    // Mecanismo de stuffing 
-    unsigned char trama_stuffed[trama_size * 2]; // Dobro do tamanho para garantir que cabe 
-    trama_size = stuffing(trama, trama_size, &trama_stuffed);
-    trama_stuffed[trama_size] = FLAG;
-    trama_size++;
+    msg[bufSize + 4] = BCC2;
 
-    // Desligar o alarme e dar reset
+    unsigned char stuffed[newSize * 2];
+    newSize = stuffing(msg, newSize, stuffed);
+    stuffed[newSize] = FLAG;
+    newSize++;
+
     STOP = FALSE;
-    current_state = START;
     alarmEnabled = FALSE;
     alarmCount = 0;
+    state = START;
 
-    while(STOP == FALSE && alarmCount < maxTries){
-        if(alarmEnabled == FALSE){
-            // Fazer write e ativar o alarme
-            bytes = write(fd, trama_stuffed, trama_size);
-            printf("> %d bytes written\n", bytes);
-            alarm(timeout);
+    int numtries = 0;
+
+    int reject = FALSE;
+
+    while (STOP == FALSE && alarmCount < layer.nRetransmissions)
+    {
+        if (alarmEnabled == FALSE)
+        {
+            numtries++;
+            bytes = write(fd, stuffed, newSize);
+            printf("Data Enviada. %d bytes written, %dº try...\n", bytes, numtries);
+            alarm(layer.timeout); // Set alarm to be triggered
             alarmEnabled = TRUE;
+            state = START;
         }
 
-        // Alterar estado state machine
-        stateMachine(A_TRANSMITER, NULL, 0, 1);
+        stateMachine(A_T, 0, 0, 1);
 
-        // Verificar resposta da state machine
-        if ((packet == 0 && answer == REJ1) || (packet == 1 && answer == REJ0)){
-            last_rejected = TRUE;
+        if ((packet == 0 && response == REJ1) || (packet == 1 && response == REJ0))
+        {
+            reject = TRUE;
         }
 
-        if(last_rejected == TRUE){
-            alarmEnabled = FALSE;
+        if (reject == TRUE)
+        {
             alarm(0);
+            alarmEnabled = FALSE;
         }
     }
-
     packet = (packet + 1) % 2;
-    printf("> Writting went well\n\n");
     alarm(0);
-    alarmEnabled = FALSE;
-    
+    printf("Data Accepted!\n");
+
     return 0;
 }
 
@@ -359,113 +455,122 @@ int llwrite(const unsigned char *buf, int bufSize)
 int llread(unsigned char *buffer)
 {
     int bytesread = 0;
-    static int packet = 0;
-    unsigned char trama_stuffed[MAX_SIZE * 2 + 7];
-    unsigned char trama_unstuffed[MAX_SIZE + 7];
-    STOP = FALSE;
-    current_state = START;
 
-    while (STOP == FALSE){
-        if (stateMachine(A_TRANSMITER, C_INFO(packet), 1, 0)){
-            trama_stuffed[bytesread] = readbyte;
+    static int packet = 0;
+
+    unsigned char stuffedMsg[MAX_BUFFER_SIZE];
+    unsigned char unstuffedMsg[MAX_PACKET_SIZE + 7];
+
+    STOP = FALSE;
+    state = START;
+
+    while (STOP == FALSE)
+    {
+        if (stateMachine(A_T, C_INF(packet), 1, 0))
+        {
+            stuffedMsg[bytesread] = readbyte;
             bytesread++;
         }
     }
 
-    int trama_size = destuffing(trama_stuffed, bytesread, trama_unstuffed);
+    printf("DATA RECEIVED\n");
 
-    unsigned char received = trama_unstuffed[trama_size - 2]; // BCC2 recebido
+    int s = destuffing(stuffedMsg, bytesread, unstuffedMsg);
 
-    // Calcular BCC2 esperado
-    if (trama_size < 0){ printf("> Error in trama size: %d\n", trama_size); }
+    unsigned char receivedBCC2 = unstuffedMsg[s - 2];
+    printf("RECEIVED BCC2: %x\n", receivedBCC2);
+    unsigned char expectedBCC2 = calculateBCC2(unstuffedMsg, s - 2, 4);
+    printf("EXPECTED BCC2: %x\n", expectedBCC2);
 
-    unsigned char expected = 0x00;
-    for (unsigned int i = 4; i < trama_size - 2; i++) { // Começa no 4 para avançar flag, a, c e bcc1, acaba -2 para ignorar o proprio bcc2 e flag
-        expected ^= buffer[i];
-    }
-
-    printf("> Received BCC2: %x\n", received);
-    printf("> Expected BCC2: %x\n", expected);
-
-    if ((received == expected) && (trama_unstuffed[2] == C_INFO(packet))){
+    if (receivedBCC2 == expectedBCC2 && unstuffedMsg[2] == C_INF(packet))
+    {
         packet = (packet + 1) % 2;
-        sendBuffer(A_TRANSMITER, RR(packet));
-        memcpy(buffer, &trama_unstuffed[4], trama_size - 5);
-        printf("STATUS 1 ALL OK: %x , %x\nSENDING RESPONSE\n", received, trama_unstuffed[2]);
-        return trama_size - 5;
+        sendBuffer(A_T, RR(packet));
+        memcpy(buffer, &unstuffedMsg[4], s - 5);
+        printf("STATUS 1 ALL OK: %x , %x\nSENDING RESPONSE\n", receivedBCC2, unstuffedMsg[2]);
+        return s - 5;
     }
-    else if (received == expected){
-        sendBuffer(A_TRANSMITER, RR(packet));
+    else if (receivedBCC2 == expectedBCC2)
+    {
+        sendBuffer(A_T, RR(packet));
         tcflush(fd, TCIFLUSH);
         printf("Duplicate packet!\n");
     }
-    else {
-        sendBuffer(A_TRANSMITER, REJ(packet));
+    else
+    {
+        sendBuffer(A_T, REJ(packet));
         tcflush(fd, TCIFLUSH);
         printf("Error in BCC2, sent REJ\n");
     }
-    return 0;
+    return -1;
 }
 
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics) {
+int llclose(int showStatistics)
+{
     STOP = FALSE;
+
     alarmEnabled = FALSE;
     alarmCount = 0;
 
-    LinkLayerRole role = link_layer.role;
-    int maxTries = link_layer.nRetransmissions;
-    int timeout = link_layer.timeout;
+    state = START;
+    response = OTHER;
 
-    if (role == LlTx) {
-        while (!STOP && alarmCount < maxTries) {
-            if (!alarmEnabled) {
-                bytes = sendBuffer(A_TRANSMITER, DISC);
-                printf("Number of written bytes: %d \n\n", bytes);
-                printf("DISC was sent in order to terminate\n\n");
-                alarm(timeout);
+    switch (getRole())
+    {
+    case LlTx:
+
+        while (STOP == FALSE && alarmCount < getnTransmissions())
+        {
+            if (alarmEnabled == FALSE)
+            {
+                bytes = sendBuffer(A_T, DISC);
+                printf("Sent DISC\n");
+                printf("%d bytes written\n", bytes);
+                alarm(getTimeOut()); // Set alarm to be triggered
                 alarmEnabled = TRUE;
             }
-            stateMachine(A_RECEIVER, DISC, 0, 0);
-        }
 
-        if (alarmCount == maxTries) {
+            stateMachine(A_R, DISC, 0, 0);
+        }
+        if (alarmCount == getnTransmissions())
             return -1;
+        printf("Received DISC\n");
+        bytes = sendBuffer(A_R, C_UA);
+        printf("Sent UA\n");
+        printf("%d bytes written\n", bytes);
+        break;
+    case LlRx:
+        while (STOP == FALSE)
+        {
+            stateMachine(A_T, DISC, 0, 0);
         }
-
-        printf("DISC was received\n\n");
-        bytes = sendBuffer(A_RECEIVER, C_UA);
-        printf("Sending UA now\n\n");
-        printf("Number of written bytes: %d \n\n", bytes);
-    } 
-    else if (role == LlRx) {
-        while (!STOP) {
-            stateMachine(A_RECEIVER, DISC, 0, 0);
-        }
-
-        printf("DISC was received\n\n");
-        sendBuffer(A_RECEIVER, C_UA);
-        printf("Sending UA now\n\n");
-
-        current_state = START;
+        printf("Received DISC\n");
+        bytes = sendBuffer(A_R, DISC);
+        printf("Sent DISC\n");
+        printf("%d bytes written\n", bytes);
         STOP = FALSE;
-
-        while (!STOP) {
-            stateMachine(A_RECEIVER, C_UA, 0, 0);
+        state = START;
+        while (STOP == FALSE)
+        {
+            stateMachine(A_R, C_UA, 0, 0);
         }
-
-        printf("UA was received!\n\n");
+        printf("Received UA\n");
+        break;
+    default:
+        break;
     }
 
     // Restore the old port settings
-    if (tcsetattr(fd, TCSANOW, &oldtio) == -1) {
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+    {
         perror("tcsetattr");
         exit(-1);
     }
 
     close(fd);
+
     return 0;
 }
-
