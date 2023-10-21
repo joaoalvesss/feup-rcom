@@ -13,7 +13,7 @@
 #include <string.h>
 #include <time.h>
 
-typedef enum{ LlTx, LlRx, } LinkLayerRole;
+typedef enum{ LlTx, LlRx } LinkLayerRole;
 
 typedef struct
 {
@@ -27,20 +27,15 @@ typedef struct
 #define MAX_PACKET_SIZE 256
 #define MAX_BUFFER_SIZE (MAX_PACKET_SIZE * 2 + 7)
 
-// MISC
 #define FALSE 0
 #define TRUE 1
 
-// Baudrate settings are defined in <asm/termbits.h>, which is
-// included by <termios.h>
-#define _POSIX_SOURCE 1 // POSIX compliant source
+#define _POSIX_SOURCE 1
 
 #define FALSE 0
 #define TRUE 1
-
 #define BUF_SIZE 256
 
-// SET buffer values
 #define FLAG 0x7E
 #define A_T 0x03
 #define A_R 0x01
@@ -64,14 +59,12 @@ typedef struct
 #define S_STOP 5
 #define WAITING_DATA 6
 
-// Responses
 #define RR0 0
 #define RR1 1
 #define REJ0 2
 #define REJ1 3
 #define OTHER 4
 
-//Packets
 #define MIDDLE_PACKET 1
 #define STARTING_PACKET 2
 #define ENDING_PACKET 3

@@ -1,50 +1,47 @@
 // Application layer protocol implementation
 
 #include "application_layer.h"
+#include <signal.h>
+#include <stdlib.h>
 
 struct stat file_stat;
+// clock_t start_t, end_t;
+// double total_t;
 
-clock_t start_t, end_t;
-double total_t;
 
+int transmitData(const char *filename) {
+    // start_t = clock();
 
-int transmitter(const char *filename)
-{
-    start_t = clock();
-
-    if (stat(filename, &file_stat) < 0)
-    {
+    if (stat(filename, &file_stat) < 0) {
         perror("Error getting file information.");
         return -1;
     }
 
-    FILE *fptr = fopen(filename, "rb");
+    FILE *filePointer = fopen(filename, "rb");
 
-    // Starting packet
-    unsigned L1 = sizeof(file_stat.st_size);
-    unsigned L2 = strlen(filename);
-    unsigned packet_size = 5 + L1 + L2;
+    unsigned fileSizeLength = sizeof(file_stat.st_size);
+    unsigned filenameLength = strlen(filename);
+    unsigned packetSize = 5 + fileSizeLength + filenameLength;
 
-    unsigned char packet[packet_size];
+    unsigned char packet[packetSize];
     packet[0] = STARTING_PACKET;
     packet[1] = FILE_SIZE;
-    packet[2] = L1;
-    memcpy(&packet[3], &file_stat.st_size, L1);
-    packet[3 + L1] = FILE_NAME;
-    packet[4 + L1] = L2;
-    memcpy(&packet[5 + L1], filename, L2);
+    packet[2] = fileSizeLength;
+    memcpy(&packet[3], &file_stat.st_size, fileSizeLength);
+    packet[3 + fileSizeLength] = FILE_NAME;
+    packet[4 + fileSizeLength] = filenameLength;
+    memcpy(&packet[5 + fileSizeLength], filename, filenameLength);
 
-    if (llwrite(packet, packet_size) < 0)
+    if (llwrite(packet, packetSize) < 0)
         return -1;
 
     printf("Starting packet sent\n");
 
-    // Middle packets
     unsigned char buf[MAX_PACKET_SIZE];
     unsigned bytes_to_send;
     unsigned sequenceNumber = 0;
 
-    while ((bytes_to_send = fread(buf, sizeof(unsigned char), MAX_PACKET_SIZE - 4, fptr)) > 0) {
+    while ((bytes_to_send = fread(buf, sizeof(unsigned char), MAX_PACKET_SIZE - 4, filePointer)) > 0) {
         printf("MIDLE PACKET\n");
         unsigned char dataPacket[MAX_PACKET_SIZE];
         dataPacket[0] = MIDDLE_PACKET;
@@ -57,57 +54,59 @@ int transmitter(const char *filename)
         printf("Sent %dº data package\n", sequenceNumber);
         sequenceNumber++;
     }
-    
-    printf("Midle packets sent\n");
 
 
-    L1 = sizeof(file_stat.st_size);
-    L2 = strlen(filename);
-    packet_size = 5 + L1 + L2;
+    printf("Middle packets sent\n");
+
+    fileSizeLength = sizeof(file_stat.st_size);
+    filenameLength = strlen(filename);
+    packetSize = 5 + fileSizeLength + filenameLength;
 
     packet[0] = ENDING_PACKET;
     packet[1] = FILE_SIZE;
-    packet[2] = L1;
-    memcpy(&packet[3], &file_stat.st_size, L1);
-    packet[3 + L1] = FILE_NAME;
-    packet[4 + L1] = L2;
-    memcpy(&packet[5 + L1], filename, L2);
+    packet[2] = fileSizeLength;
+    memcpy(&packet[3], &file_stat.st_size, fileSizeLength);
+    packet[3 + fileSizeLength] = FILE_NAME;
+    packet[4 + fileSizeLength] = filenameLength;
+    memcpy(&packet[5 + fileSizeLength], filename, filenameLength);
 
-    if (llwrite(packet, packet_size) < 0)
+    if (llwrite(packet, packetSize) < 0)
         return -1;
 
     printf("Ending packet sent\n");
 
-    fclose(fptr);
+    fclose(filePointer);
 
-    end_t = clock();
-    total_t = (double)(end_t - start_t) / CLOCKS_PER_SEC;
-
-    printf("\nTotal time taken: %f seconds\n", total_t);
-    printf("Size transfered: %d bytes\n", (int)file_stat.st_size);
-    printf("Transfer Speed: %f B/s\n\n", file_stat.st_size/total_t);
-
+    // end_t = clock();
+    // total_t = (double)(end_t - start_t) / CLOCKS_PER_SEC;
+    // printf("\nTotal time taken: %f seconds\n", total_t);
+    // printf("Size transferred: %d bytes\n", (int)file_stat.st_size);
+    // printf("Transfer Speed: %f B/s\n\n", file_stat.st_size / total_t);
 
     return 0;
 }
 
-int receiver(const char *filename)
-{
+
+int receiveData(const char *file) {
     int s;
     static FILE *destination;
     int stop = FALSE;
     while (stop == FALSE)
     {
-        printf("\nRECEIVER\n");
+        printf("\nRECEIVER1\n");
 
         unsigned char buf[MAX_PACKET_SIZE];
-        if ((s = llread(buf)) < 0)
+        printf("\nRECEIVER2\n");
+        if ((s = llread(buf)) < 0){
+            printf("\nRECEIVER3\n");
             continue;
+        }
+
         printf("PACKET : %d\n", buf[0]);
         switch (buf[0])
         {
         case STARTING_PACKET:
-            destination = fopen(filename, "wb");
+            destination = fopen(file, "wb");
             break;
 
         case MIDDLE_PACKET: ;
@@ -128,40 +127,44 @@ int receiver(const char *filename)
             break;
         }
     }
-    return 0;
-}
+    return 0;   
+}   
 
-void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename)
-{
-    LinkLayer layer;
+void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename) {
+    LinkLayer link_layer;
 
-    layer.baudRate = baudRate;
-    layer.nRetransmissions = nTries;
+    link_layer.baudRate = baudRate;
+    link_layer.nRetransmissions = nTries;
+    link_layer.timeout = timeout*1000;
 
     if (strcmp(role, "tx") == 0)
-        layer.role = LlTx;
-    if (strcmp(role, "rx") == 0)
-        layer.role = LlRx;
+        link_layer.role = LlTx;
+    else if (strcmp(role, "rx") == 0)
+        link_layer.role = LlRx;
+    else {
+        fprintf(stderr, "Unknown role: %s\n", role);
+        return;
+    }
 
-    sprintf(layer.serialPort, "%s", serialPort);
-    layer.timeout = timeout;
+    sprintf(link_layer.serialPort, "%s", serialPort);
 
-    if (llopen(layer) < 0){
+    if (llopen(link_layer) < 0) {
         exit(-1);
         return;
     }
 
-    switch (layer.role)
-    {
-    case LlTx:
-        transmitter(filename);
-        break;
-    case LlRx:
-        receiver(filename);
-        break;
-    default:
-        break;
+    if (link_layer.role == LlTx) {
+        transmitData(filename);
+    } 
+    else if (link_layer.role == LlRx) {
+        receiveData(filename);
+    }
+    else {
+        fprintf(stderr, "Unknown role: %s\n", role);
+        return;
     }
 
     llclose(FALSE);
 }
+
+
