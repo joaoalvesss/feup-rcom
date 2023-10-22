@@ -37,26 +37,26 @@ int transmitData(const char *filename) {
 
     printf("Starting packet sent\n");
 
-    unsigned char buf[MAX_PACKET_SIZE];
+    unsigned char buf[MAX_SIZE];
     unsigned bytes_to_send;
     unsigned sequenceNumber = 0;
 
-    while ((bytes_to_send = fread(buf, sizeof(unsigned char), MAX_PACKET_SIZE - 4, filePointer)) > 0) {
+    while ((bytes_to_send = fread(buf, sizeof(unsigned char), MAX_SIZE - 4, filePointer)) > 0) {
         printf("MIDLE PACKET\n");
-        unsigned char dataPacket[MAX_PACKET_SIZE];
+        unsigned char dataPacket[MAX_SIZE];
         dataPacket[0] = MIDDLE_PACKET;
         dataPacket[1] = sequenceNumber % 255;
         dataPacket[2] = (bytes_to_send / 256);
         dataPacket[3] = (bytes_to_send % 256);
         memcpy(&dataPacket[4], buf, bytes_to_send);
 
-        llwrite(dataPacket, ((bytes_to_send + 4) < MAX_PACKET_SIZE) ? (bytes_to_send + 4) : MAX_PACKET_SIZE);
-        printf("Sent %dº data package\n", sequenceNumber);
+        llwrite(dataPacket, ((bytes_to_send + 4) < MAX_SIZE) ? (bytes_to_send + 4) : MAX_SIZE);
+        printf("> Another packet send\n");
         sequenceNumber++;
     }
 
 
-    printf("Middle packets sent\n");
+    // printf("Middle packets sent\n");
 
     fileSizeLength = sizeof(file_stat.st_size);
     filenameLength = strlen(filename);
@@ -73,7 +73,7 @@ int transmitData(const char *filename) {
     if (llwrite(packet, packetSize) < 0)
         return -1;
 
-    printf("Ending packet sent\n");
+    // printf("Ending packet sent\n");
 
     fclose(filePointer);
 
@@ -87,26 +87,25 @@ int transmitData(const char *filename) {
 }
 
 
-int receiveData(const char *file) {
-    int s;
-    static FILE *destination;
-    int stop = FALSE;
-    while (stop == FALSE)
-    {
-        printf("\nRECEIVER1\n");
+int receiveData(const char *filename) {
+    int size;
+    static FILE *dest;
+    int STOP = FALSE;
 
-        unsigned char buf[MAX_PACKET_SIZE];
+    while (!STOP) {
+        printf("\nRECEIVER1\n");
+        unsigned char buf[MAX_SIZE];
         printf("\nRECEIVER2\n");
-        if ((s = llread(buf)) < 0){
+
+        if ((size = llread(buf)) < 0){
             printf("\nRECEIVER3\n");
             continue;
         }
 
-        printf("PACKET : %d\n", buf[0]);
-        switch (buf[0])
-        {
+        // printf("PACKET : %d\n", buf[0]);
+        switch (buf[0]) {
         case STARTING_PACKET:
-            destination = fopen(file, "wb");
+            dest = fopen(filename, "wb");
             break;
 
         case MIDDLE_PACKET: ;
@@ -116,14 +115,14 @@ int receiveData(const char *file) {
             n = (n + 1) % 255;
 
             unsigned int data_size = buf[2] * 256 + buf[3];
-            fwrite(&buf[4], sizeof(unsigned char), data_size * sizeof(unsigned char), destination);
+            fwrite(&buf[4], sizeof(unsigned char), data_size * sizeof(unsigned char), dest);
 
             break;
 
         case ENDING_PACKET:
-            printf("\nENDING PACKET\n");
-            fclose(destination);
-            stop = TRUE;
+            // printf("\nENDING PACKET\n");
+            fclose(dest);
+            STOP = TRUE;
             break;
         }
     }
@@ -135,7 +134,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
 
     link_layer.baudRate = baudRate;
     link_layer.nRetransmissions = nTries;
-    link_layer.timeout = timeout*1000;
+    link_layer.timeout = timeout;
 
     if (strcmp(role, "tx") == 0)
         link_layer.role = LlTx;

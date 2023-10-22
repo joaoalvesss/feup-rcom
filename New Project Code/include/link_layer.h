@@ -24,8 +24,7 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-#define MAX_PACKET_SIZE 256
-#define MAX_BUFFER_SIZE (MAX_PACKET_SIZE * 2 + 7)
+#define MAX_SIZE 256
 
 #define FALSE 0
 #define TRUE 1
@@ -51,13 +50,12 @@ typedef struct
 
 #define ESCAPE 0x7D
 
-#define START 0
-#define FLAG_RCV 1
-#define A_RCV 2
-#define C_RCV 3
-#define BCC_OK 4
-#define S_STOP 5
-#define WAITING_DATA 6
+#define START          1
+#define FLAG_RCV       2
+#define A_RCV          3
+#define C_RCV          4
+#define BCC_OK         5
+#define WAITING_DATA   6
 
 #define RR0 0
 #define RR1 1
