@@ -8,7 +8,6 @@ struct stat file_stat;
 // clock_t start_t, end_t;
 // double total_t;
 
-
 int transmitData(const char *filename) {
     // start_t = clock();
 
@@ -25,24 +24,23 @@ int transmitData(const char *filename) {
 
     unsigned char packet[packetSize];
     packet[0] = STARTING_PACKET;
-    packet[1] = FILE_SIZE;
+    packet[1] = 0;
     packet[2] = fileSizeLength;
     memcpy(&packet[3], &file_stat.st_size, fileSizeLength);
-    packet[3 + fileSizeLength] = FILE_NAME;
+    packet[3 + fileSizeLength] = 1;
     packet[4 + fileSizeLength] = filenameLength;
     memcpy(&packet[5 + fileSizeLength], filename, filenameLength);
 
+    printf("> Sending start packet\n");
     if (llwrite(packet, packetSize) < 0)
         return -1;
-
-    printf("Starting packet sent\n");
 
     unsigned char buf[MAX_SIZE];
     unsigned bytes_to_send;
     unsigned sequenceNumber = 0;
 
     while ((bytes_to_send = fread(buf, sizeof(unsigned char), MAX_SIZE - 4, filePointer)) > 0) {
-        printf("MIDLE PACKET\n");
+        printf("> Sending middle packet\n");
         unsigned char dataPacket[MAX_SIZE];
         dataPacket[0] = MIDDLE_PACKET;
         dataPacket[1] = sequenceNumber % 255;
@@ -50,26 +48,29 @@ int transmitData(const char *filename) {
         dataPacket[3] = (bytes_to_send % 256);
         memcpy(&dataPacket[4], buf, bytes_to_send);
 
-        llwrite(dataPacket, ((bytes_to_send + 4) < MAX_SIZE) ? (bytes_to_send + 4) : MAX_SIZE);
-        printf("> Another packet send\n");
+        if (llwrite(dataPacket, ((bytes_to_send + 4) < MAX_SIZE) ? (bytes_to_send + 4) : MAX_SIZE) == -1) {
+            break;
+        }
+        printf("> Another packet sent\n");
         sequenceNumber++;
+        //printf("\n%d\n", bytes_to_send);
+        //for (int i = 0; i < MAX_SIZE; i++) printf("%x", buf[i]);
+        //printf("\n");
     }
-
-
-    // printf("Middle packets sent\n");
 
     fileSizeLength = sizeof(file_stat.st_size);
     filenameLength = strlen(filename);
     packetSize = 5 + fileSizeLength + filenameLength;
 
     packet[0] = ENDING_PACKET;
-    packet[1] = FILE_SIZE;
+    packet[1] = 0;
     packet[2] = fileSizeLength;
     memcpy(&packet[3], &file_stat.st_size, fileSizeLength);
-    packet[3 + fileSizeLength] = FILE_NAME;
+    packet[3 + fileSizeLength] = 1;
     packet[4 + fileSizeLength] = filenameLength;
     memcpy(&packet[5 + fileSizeLength], filename, filenameLength);
 
+    printf("> Sending end packet\n");
     if (llwrite(packet, packetSize) < 0)
         return -1;
 
@@ -93,39 +94,37 @@ int receiveData(const char *filename) {
     int STOP = FALSE;
 
     while (!STOP) {
-        printf("\nRECEIVER1\n");
         unsigned char buf[MAX_SIZE];
-        printf("\nRECEIVER2\n");
 
         if ((size = llread(buf)) < 0){
-            printf("\nRECEIVER3\n");
             continue;
         }
 
         // printf("PACKET : %d\n", buf[0]);
-        switch (buf[0]) {
-        case STARTING_PACKET:
+        if(buf[0] == 2) {
+            printf("\n> Receiving start packet\n");
             dest = fopen(filename, "wb");
-            break;
+        }
 
-        case MIDDLE_PACKET: ;
-            static unsigned int n = 0;
-            if (buf[1] != n)
-                return -1;
-            n = (n + 1) % 255;
+        else if(buf[0] == 1) {
+            printf("\n> Receiving middle packet\n");
+            static unsigned int buf_position = 0;
+            if (buf[1] != buf_position){ return -1; }
+                
+            buf_position = (buf_position + 1) % 255;
 
             unsigned int data_size = buf[2] * 256 + buf[3];
             fwrite(&buf[4], sizeof(unsigned char), data_size * sizeof(unsigned char), dest);
 
-            break;
+        }
 
-        case ENDING_PACKET:
-            // printf("\nENDING PACKET\n");
+        else if (buf[0] == 3) {
+            printf("\n> Receiving end packet\n");
             fclose(dest);
             STOP = TRUE;
-            break;
         }
     }
+
     return 0;   
 }   
 
@@ -165,5 +164,4 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
 
     llclose(FALSE);
 }
-
 

@@ -24,55 +24,45 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-#define MAX_SIZE 256
+#define _POSIX_SOURCE       1
+#define MAX_SIZE            256
 
-#define FALSE 0
-#define TRUE 1
+#define FALSE               0
+#define TRUE                1
 
-#define _POSIX_SOURCE 1
+#define FLAG                0x7E
+#define A_TRANSMITER        0x03
+#define A_RECEIVER          0x01
+#define C_SET               0x03
+#define C_UA                0x07
+#define BCC(a, c)           (a^c) 
+#define DISC                0x0B
+#define ESCAPE              0x7D
+#define RR(n)               (0x05 | (n << 7))
+#define REJ(n)              (0x01 | (n << 7))
+#define C_INF(n)            (0x00 | (n << 6))
+#define RR_R                0
 
-#define FALSE 0
-#define TRUE 1
-#define BUF_SIZE 256
+#define START               1
+#define FLAG_RCV            2
+#define A_RCV               3
+#define C_RCV               4
+#define BCC_OK              5
+#define WAITING             6
 
-#define FLAG 0x7E
-#define A_T 0x03
-#define A_R 0x01
-#define C_SET 0x03
-#define C_UA 0x07
-#define BCC(a, c) (a ^ c) 
-#define DISC 0x0B
-#define RR(n) 0x05 | (n << 7)
-#define REJ(n) 0x01 | (n << 7)
-#define C_INF(n) (0x00 | (n << 6))
+#define RR0                 0
+#define RR1                 1
+#define REJ0                2
+#define REJ1                3
+#define OTHER               4
 
-#define RR_R 0
+#define MIDDLE_PACKET       1
+#define STARTING_PACKET     2
+#define ENDING_PACKET       3
 
-#define ESCAPE 0x7D
+int state_machine(unsigned char a, unsigned char c, int isData, int RR_REJ);
 
-#define START          1
-#define FLAG_RCV       2
-#define A_RCV          3
-#define C_RCV          4
-#define BCC_OK         5
-#define WAITING_DATA   6
-
-#define RR0 0
-#define RR1 1
-#define REJ0 2
-#define REJ1 3
-#define OTHER 4
-
-#define MIDDLE_PACKET 1
-#define STARTING_PACKET 2
-#define ENDING_PACKET 3
-
-#define FILE_SIZE 0
-#define FILE_NAME 1
-
-int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ);
-
-int sendBuffer(unsigned char a, unsigned char c);
+int send_buffer(unsigned char a, unsigned char c);
 
 int llopen(LinkLayer connectionParameters);
 

@@ -10,16 +10,15 @@ volatile int STOP = FALSE;
 int current_state = START;
 int fd, bytes = 0;
 unsigned char readbyte;
-int response = -1;
+int answer = -1;
 LinkLayer link_layer;
 
 
-int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
-    if (!RR_REJ)
-        response = -1;
+int state_machine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
+    if (!RR_REJ){ answer = -1; }
+        
     unsigned char byte = 0;
     int bytes = 0;
-
     bytes = read(fd, &byte, 1);
 
     if (bytes > 0) {
@@ -40,16 +39,16 @@ int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
             // printf("A_RCV\n");
             if (RR_REJ) {
                 if (byte == (RR(0))) {
-                    response = RR0;
+                    answer = RR0;
                     current_state = C_RCV;
                 } else if (byte == (RR(1))) {
-                    response = RR1;
+                    answer = RR1;
                     current_state = C_RCV;
                 } else if (byte == (REJ(0))) {
-                    response = REJ0;
+                    answer = REJ0;
                     current_state = C_RCV;
                 } else if (byte == (REJ(1))) {
-                    response = REJ1;
+                    answer = REJ1;
                     current_state = C_RCV;
                 } else {
                     current_state = START;
@@ -67,18 +66,18 @@ int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
 
         else if (current_state == C_RCV) {
             // printf("C_RCV\n");
-            if (response == RR0)
+            if (answer == RR0)
                 c = RR(0);
-            else if (response == RR1)
+            else if (answer == RR1)
                 c = RR(1);
-            else if (response == REJ0)
+            else if (answer == REJ0)
                 c = REJ(0);
-            else if (response == REJ1)
+            else if (answer == REJ1)
                 c = REJ(1);
 
             if (byte == (a ^ c)) {
                 if (isData)
-                    current_state = WAITING_DATA;
+                    current_state = WAITING;
                 else
                     current_state = BCC_OK;
             } 
@@ -88,8 +87,8 @@ int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
                 current_state = START;
         } 
 
-        else if (current_state == WAITING_DATA) {
-            // printf("WAITING_DATA\n");
+        else if (current_state == WAITING) {
+            // printf("WAITING\n");
             if (byte == FLAG) {
                 STOP = TRUE;
             }
@@ -117,7 +116,7 @@ int stateMachine(unsigned char a, unsigned char c, int isData, int RR_REJ) {
 }
 
 
-int sendBuffer(unsigned char a, unsigned char c) {
+int send_buffer(unsigned char a, unsigned char c) {
     unsigned char buffer[5];
     buffer[0] = FLAG;
     buffer[1] = a;
@@ -175,12 +174,12 @@ int llopen(LinkLayer connectionParameters) {
     if (link_layer.role == LlTx) {
         while (STOP == FALSE && alarmCount < link_layer.nRetransmissions) {
             if (alarmEnabled == FALSE) {
-                bytes = sendBuffer(A_T, C_SET);
+                bytes = send_buffer(A_TRANSMITER, C_SET);
                 alarm(link_layer.timeout);
                 alarmEnabled = TRUE;
                 current_state = START;
             }
-            stateMachine(A_T, C_UA, 0, 0);
+            state_machine(A_TRANSMITER, C_UA, 0, 0);
         }
 
         alarm(0);
@@ -193,9 +192,9 @@ int llopen(LinkLayer connectionParameters) {
     } 
     else if (connectionParameters.role == LlRx) {
         while (STOP == FALSE) {
-            stateMachine(A_T, C_SET, 0, 0);
+            state_machine(A_TRANSMITER, C_SET, 0, 0);
         }
-        bytes = sendBuffer(A_T, C_UA);
+        bytes = send_buffer(A_TRANSMITER, C_UA);
     }
 
     return 0;
@@ -204,97 +203,89 @@ int llopen(LinkLayer connectionParameters) {
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int stuffing(const unsigned char *msg, int newSize, unsigned char *stuffedMsg) {
+int stuff(unsigned char *stuffed, const unsigned char *trama, int len) {
     int size = 0;
-    stuffedMsg[size++] = msg[0];
+    stuffed[size++] = trama[0];
 
-    for (int i = 1; i < newSize; i++) {
-        if (msg[i] == FLAG || msg[i] == ESCAPE) {
-            stuffedMsg[size++] = ESCAPE;
-            stuffedMsg[size++] = msg[i] ^ 0x20;
+    for (int i = 1; i < len; i++) {
+        if (trama[i] == FLAG || trama[i] == ESCAPE) {
+            stuffed[size++] = ESCAPE;
+            stuffed[size++] = trama[i]^0x20;
         }
         else
-            stuffedMsg[size++] = msg[i];
+            stuffed[size++] = trama[i];
     }
 
     return size;
 }
 
-int destuffing(const unsigned char *msg, int newSize, unsigned char *destuffedMsg) {
+int destuff(unsigned char *destuffed, const unsigned char *trama, int len) {
     int size = 0;
-    destuffedMsg[size++] = msg[0];
+    destuffed[size++] = trama[0];
 
-    for (int i = 1; i < newSize; i++) {
-        if (msg[i] == ESCAPE) {
-            destuffedMsg[size++] = msg[i + 1] ^ 0x20;
+    for (int i = 1; i < len; i++) {
+        if (trama[i] == ESCAPE) {
+            destuffed[size++] = trama[i+1]^0x20;
             i++;
         }
         else
-            destuffedMsg[size++] = msg[i];
+            destuffed[size++] = trama[i];
     }
     return size;
 }
 
 int llwrite(const unsigned char *buf, int bufSize) {
-    int newSize = bufSize + 5;
-    unsigned char msg[newSize];
+    int size = bufSize + 5;
+    unsigned char trama[size];
+    static int pacote = 0;
+    int tries = 1;
+    int rej = FALSE;
 
-    static int packet = 0;
+    // apply header
+    trama[0] = FLAG;
+    trama[1] = A_TRANSMITER;
+    trama[2] = C_INF(pacote);
+    trama[3] = BCC(A_TRANSMITER, C_INF(pacote));
 
-    msg[0] = FLAG;
-    msg[1] = A_T;
-    msg[2] = C_INF(packet);
-    msg[3] = BCC(A_T, C_INF(packet));
-
-    unsigned char BCC2 = buf[0];
-    for (int i = 0; i < bufSize; i++)
-    {
-        msg[i + 4] = buf[i];
-        if (i > 0)
-            BCC2 ^= buf[i];
+    // content
+    unsigned char bcc2 = buf[0];
+    for (int i = 0; i < bufSize; i++) {
+        trama[i + 4] = buf[i];
+        if (i > 0){ bcc2 ^= buf[i]; }
     }
 
-    msg[bufSize + 4] = BCC2;
-
-    unsigned char stuffed[newSize * 2];
-    newSize = stuffing(msg, newSize, stuffed);
-    stuffed[newSize] = FLAG;
-    newSize++;
+    // apply tail
+    trama[bufSize + 4] = bcc2;
+    unsigned char stuffed[size*2];
+    size = stuff(stuffed, trama, size);
+    stuffed[size] = FLAG;
+    size++;
 
     STOP = FALSE;
     alarmEnabled = FALSE;
     alarmCount = 0;
     current_state = START;
 
-    int numtries = 0;
-    
-    int reject = FALSE;
+    while (!STOP && alarmCount < link_layer.nRetransmissions) {
+        if (!alarmEnabled) {  
+            bytes = write(fd, stuffed, size);
+            printf("> %d Written bytes at %d try\n", bytes, tries);
 
-    while (STOP == FALSE && alarmCount < link_layer.nRetransmissions) {
-        if (alarmEnabled == FALSE) {
-            numtries++;
-            bytes = write(fd, stuffed, newSize);
-            printf("> %d Written bytes at %d try\n", bytes, numtries);
             alarm(link_layer.timeout);
             alarmEnabled = TRUE;
             current_state = START;
+            tries++;
         }
 
-        stateMachine(A_T, 0, 0, 1);
+        state_machine(A_TRANSMITER, 0, 0, 1);
 
-        if ((packet == 0 && response == REJ1) || (packet == 1 && response == REJ0)) {
-            reject = TRUE;
-        }
-
-        if (reject == TRUE) {
-            alarm(0);
-            alarmEnabled = FALSE;
-        }
+        if ((pacote == 0 && answer == REJ1) || (pacote == 1 && answer == REJ0)) { rej = TRUE; }
+        if (rej == TRUE) { alarm(0); alarmEnabled = FALSE; }
     }
-    packet = (packet + 1) % 2;
+
+    pacote = (pacote + 1) % 2;
     alarm(0);
     printf("> Packet arrived nicely\n\n");
-
     return 0;
 }
 
@@ -311,13 +302,13 @@ int llread(unsigned char *buffer) {
     unsigned char destuffed[MAX_SIZE + 7];
 
     while (STOP == FALSE){
-        if (stateMachine(A_T, C_INF(packet), 1, 0)) {
+        if (state_machine(A_TRANSMITER, C_INF(packet), 1, 0)) {
             stuffed[readed] = readbyte;
             readed++;
         }
     }
 
-    size = destuffing(stuffed, readed, destuffed);
+    size = destuff(destuffed, stuffed, readed);
     unsigned char original_bcc2 = destuffed[size - 2];
     unsigned char cmp_bcc2 = 0x00;
 
@@ -325,19 +316,19 @@ int llread(unsigned char *buffer) {
 
     if (destuffed[2] == C_INF(packet) && original_bcc2 == cmp_bcc2) {
         packet = (packet + 1) % 2;
-        sendBuffer(A_T, RR(packet));
+        send_buffer(A_TRANSMITER, RR(packet));
         memcpy(buffer, &destuffed[4], size - 5);
         printf("> Correct packet: \n > bcc2 -> %x \n > message -> %x\n", cmp_bcc2, destuffed[2]);
         size -= 5;
         return size;
     }
     else if (cmp_bcc2 == original_bcc2) {
-        sendBuffer(A_T, RR(packet));
+        send_buffer(A_TRANSMITER, RR(packet));
         tcflush(fd, TCIFLUSH);
         printf("> Received a duplicated packet, rejection ongoing\n");
     }
     else {
-        sendBuffer(A_T, REJ(packet));
+        send_buffer(A_TRANSMITER, REJ(packet));
         tcflush(fd, TCIFLUSH);
         printf("> Bcc2 didnt match, rejection ongoing\n");
     }
@@ -352,30 +343,30 @@ int llclose(int showStatistics) {
     alarmEnabled = FALSE;
     alarmCount = 0;
     current_state = START;
-    response = OTHER;
+    answer = OTHER;
 
     if (link_layer.role == LlTx) {
         while (STOP == FALSE && alarmCount < link_layer.nRetransmissions) {
             if (alarmEnabled == FALSE) {
-                bytes = sendBuffer(A_T, DISC);
+                bytes = send_buffer(A_TRANSMITER, DISC);
                 alarm(link_layer.timeout);
                 alarmEnabled = TRUE;
             }
-            stateMachine(A_R, DISC, 0, 0);
+            state_machine(A_RECEIVER, DISC, 0, 0);
         }
         if (alarmCount == link_layer.nRetransmissions) {
             return -1;
         }
-        bytes = sendBuffer(A_R, C_UA);
+        bytes = send_buffer(A_RECEIVER, C_UA);
     } else if (link_layer.role == LlRx) {
         while (STOP == FALSE) {
-            stateMachine(A_T, DISC, 0, 0);
+            state_machine(A_TRANSMITER, DISC, 0, 0);
         }
-        bytes = sendBuffer(A_R, DISC);
+        bytes = send_buffer(A_RECEIVER, DISC);
         STOP = FALSE;
         current_state = START;
         while (STOP == FALSE) {
-            stateMachine(A_R, C_UA, 0, 0);
+            state_machine(A_RECEIVER, C_UA, 0, 0);
         }
     }
 
@@ -389,4 +380,3 @@ int llclose(int showStatistics) {
 
     return 0;
 }
-
