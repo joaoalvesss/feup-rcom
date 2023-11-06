@@ -5,11 +5,11 @@
 #include <stdlib.h>
 
 struct stat file_stat;
-// clock_t start_t, end_t;
-// double total_t;
+clock_t start_t, end_t;
+double total_t;
 
 int transmitData(const char *filename) {
-    // start_t = clock();
+    start_t = clock();
 
     if (stat(filename, &file_stat) < 0) {
         perror("Error getting file information.");
@@ -78,11 +78,11 @@ int transmitData(const char *filename) {
 
     fclose(filePointer);
 
-    // end_t = clock();
-    // total_t = (double)(end_t - start_t) / CLOCKS_PER_SEC;
-    // printf("\nTotal time taken: %f seconds\n", total_t);
-    // printf("Size transferred: %d bytes\n", (int)file_stat.st_size);
-    // printf("Transfer Speed: %f B/s\n\n", file_stat.st_size / total_t);
+    end_t = clock();
+    total_t = (double)(end_t - start_t) / CLOCKS_PER_SEC;
+    printf("\nTotal time taken: %f seconds\n", total_t);
+    printf("Size transferred: %d bytes\n", (int)file_stat.st_size);
+    printf("Transfer Speed: %f B/s\n\n", file_stat.st_size / total_t);
 
     return 0;
 }

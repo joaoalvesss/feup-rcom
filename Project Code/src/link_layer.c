@@ -324,12 +324,11 @@ int llread(unsigned char *buffer) {
     }
     else if (cmp_bcc2 == original_bcc2) {
         send_buffer(A_TRANSMITER, RR(packet));
-        tcflush(fd, TCIFLUSH);
         printf("> Received a duplicated packet, rejection ongoing\n");
     }
     else {
         send_buffer(A_TRANSMITER, REJ(packet));
-        tcflush(fd, TCIFLUSH);
+        current_state = START;
         printf("> Bcc2 didnt match, rejection ongoing\n");
     }
     return -1;
