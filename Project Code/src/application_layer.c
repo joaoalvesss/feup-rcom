@@ -43,9 +43,9 @@ int transmitData(const char *filename) {
         printf("> Sending middle packet\n");
         unsigned char dataPacket[MAX_SIZE];
         dataPacket[0] = MIDDLE_PACKET;
-        dataPacket[1] = sequenceNumber % 255;
-        dataPacket[2] = (bytes_to_send / 256);
-        dataPacket[3] = (bytes_to_send % 256);
+        dataPacket[1] = sequenceNumber % (MAX_SIZE -1);
+        dataPacket[2] = (bytes_to_send / MAX_SIZE);
+        dataPacket[3] = (bytes_to_send % MAX_SIZE);
         memcpy(&dataPacket[4], buf, bytes_to_send);
 
         if (llwrite(dataPacket, ((bytes_to_send + 4) < MAX_SIZE) ? (bytes_to_send + 4) : MAX_SIZE) == -1) {
@@ -53,9 +53,6 @@ int transmitData(const char *filename) {
         }
         printf("> Another packet sent\n");
         sequenceNumber++;
-        //printf("\n%d\n", bytes_to_send);
-        //for (int i = 0; i < MAX_SIZE; i++) printf("%x", buf[i]);
-        //printf("\n");
     }
 
     fileSizeLength = sizeof(file_stat.st_size);
