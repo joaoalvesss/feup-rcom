@@ -1,37 +1,30 @@
+#include <string.h>
 #include <stdio.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <netdb.h>
-#include <string.h>
+#include <strings.h>
+#include <ctype.h>
 
-#define SERVER_PORT 6000
+#define SERVER_PORT 21
 #define SERVER_ADDR "192.168.28.96"
-#define MAX_SIZE 1000
+#define MAX_SIZE 500
 
-struct URL {
-    char host[MAX_LENGTH];      // 'ftp.up.pt'
-    char resource[MAX_LENGTH];  // 'parrot/misc/canary/warrant-canary-0.txt'
-    char file[MAX_LENGTH];      // 'warrant-canary-0.txt'
-    char user[MAX_LENGTH];      // 'username'
-    char password[MAX_LENGTH];  // 'password'
-    char ip[MAX_LENGTH];        // 193.137.29.15
-};
+void readResponse(int socketfd, char *responseCode);
 
-int parseUrl(char *input, struct URL *url); // TODO
+struct hostent *getHostInfo(char host[]);
 
-int createSocket(char *ip, int port); 
+void getFile(const int socket, char* filename);
 
-int authConn(const int socket, const char *user, const char *pass); // TODO
+void parseArgument(char *argument, char *user, char *pass, char *host, char *path);
 
-void readResponse(const int socket, char *responseCode);
+int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[], char* filename, int socketfdClient); // TODO
 
-int passiveMode(const int socket, char* ip, int *port); // TODO
+int getServerPortFromResponse(int socketfd); // TODO
 
-int requestResource(const int socket, char *resource); // TODO
-
-void getFile(const int socket_one, const int socket_two, char *filename); 
-
-int closeConnection(const int socketA, const int socketB); // TODO
+void parseFilename(char *path, char *filename);

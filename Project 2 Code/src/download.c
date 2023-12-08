@@ -1,11 +1,5 @@
 #include "include/download.h"
 
-int parseUrl(char *input, struct URL *url) {
-
-     // PARTE IMPORTANTE
-     printf(" > Exiting parseUrl function\n");
-     return 0;
-}
 
 int createSocket(char *ip, int port) { // copied from given code
      int sockfd;
@@ -29,11 +23,6 @@ int createSocket(char *ip, int port) { // copied from given code
 
      printf(" > Exiting createSocket function\n");
      return sockfd;
-}
-
-int authConn(const int socket, const char *user, const char *pass) {
-     printf(" > Exiting authConn function\n");
-     return 0;
 }
 
 void readResponse(const int socket, char *responseCode) {
@@ -80,22 +69,10 @@ void readResponse(const int socket, char *responseCode) {
           }
      }
      printf(" > Exiting readResponse function\n");
-     // talvez seja preciso adicionar return do responseCode
 }
 
-int passiveMode(const int socket, char* ip, int *port) {
 
-     // não sei para que serve isto
-     printf(" > Exiting passiveMode function\n");
-     return 0;
-}
-
-int requestResource(const int socket, char *resource) {
-     printf(" > Exiting requestResource function\n");
-     return 0;
-}
-
-void getFile(const int socket_one, const int socket_two, char *filename) {
+void getFile(const int socket, char *filename) {
      FILE *fd = fopen(filename, "wb+");
 
      if(fd == NULL){
@@ -107,26 +84,104 @@ void getFile(const int socket_one, const int socket_two, char *filename) {
      char buffer[MAX_SIZE];
 
      while(bytes_num > 0){
-          bytes_num = read(socket_one, buffer, MAX_SIZE);
+          bytes_num = read(socket, buffer, MAX_SIZE);
           if (bytes_num > 0 && fwrite(buffer, bytes_num, 1, fd) < 0) {
                fclose(fd);
                return -1;
           }
      }
 
-     
-     close(fd);
-     readResponse(socket_two, buffer);
-
-     printf(" > Exiting getFile function\n");
-
-     // talvez seja preciso adicionar algum tipo de return
-     // relacionado com os sockets mas nao sei bem como
+     fclose(fd);
+     printf(" > Exiting getFile\n");
 }
 
-int closeConnection(const int socketA, const int socketB) {
+void parseFilename(const char *path, char *filename){
+     int indexFilename = 0;
+     size_t pathLength = strlen(path);
 
-     // há alguma funcao built in para isto?
-     printf(" > Exiting closeConnection function\n");
-     return 0;
+     // reset the filename buffer
+     memset(filename, 0, 80);
+
+     for (size_t indexPath = 0; indexPath < pathLength; ++indexPath){
+          if (path[indexPath] == '/'){
+            // reset when encountering /
+            indexFilename = 0;
+            memset(filename, 0, 80);
+          } 
+          else{
+            // copy characters to the filename buffer
+            filename[indexFilename++] = path[indexPath];
+          }
+     }
+
+     printf(" > Exiting parseFilename\n");
+}
+
+struct hostent *getHostInfo(const char host[]) {
+     struct hostent *hostInfo;
+
+     // retrieve host information
+     if ((hostInfo = gethostbyname(host)) == NULL) {
+          perror("gethostbyname");
+          exit(EXIT_FAILURE);
+     }
+
+     printf(" > Exiting getHostInfo\n");
+     return hostInfo;
+}
+
+void parseArgument(char *argument, char *user, char *pass, char *host, char *path) {
+    char start[] = "ftp://";
+    int index = 0;
+    int i = 0;
+    int state = 0;
+    int length = strlen(argument);
+
+    while (i < length) {
+        switch (state) {
+        case 0: // reads the ftp://
+            if (argument[i] == start[i] && i < 5) {
+                break;
+            }
+            if (i == 5 && argument[i] == start[i])
+                state = 1;
+            else
+                printf(" > Error parsing ftp://");
+            break;
+        case 1: // reads the username
+            if (argument[i] == ':') {
+                state = 2;
+                index = 0;
+            } else {
+                user[index] = argument[i];
+                index++;
+            }
+            break;
+        case 2: // reads the password
+            if (argument[i] == '@') {
+                state = 3;
+                index = 0;
+            } else {
+                pass[index] = argument[i];
+                index++;
+            }
+            break;
+        case 3: // reads the host
+            if (argument[i] == '/') {
+                state = 4;
+                index = 0;
+            } else {
+                host[index] = argument[i];
+                index++;
+            }
+            break;
+        case 4: // reads the path
+            path[index] = argument[i];
+            index++;
+            break;
+        }
+
+        i++;
+    }
+    printf(" > Exiting parseArgument\n");
 }
