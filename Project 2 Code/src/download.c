@@ -15,8 +15,60 @@
     #define h_addr h_addr_list[0]	The first address in h_addr_list.
 */
 
-int main(int argc, char **argv){
-     return 0;
+int main(int argc, char **argv) {
+     int socketfd, socketfdClient = -1;
+     struct sockaddr_in server_addr, server_addr_client;
+     struct hostent *h;
+
+     char user[80], pass[80], host[80], path[80], filename[80], responseCode[3];
+
+     memset(user, 0, 80);
+     memset(pass, 0, 80);
+     memset(host, 0, 80);
+     memset(path, 0, 80);
+
+     parseArgument(argv[1], user, pass, host, path);
+     parseFilename(path, filename);
+
+     printf(" > Username: %s\n > Password: %s\n > Host: %s\n > Path: %s\n > Filename: %s\n", user, pass, host, path, filename);
+
+     h = getHostInfo(host);
+     printf(" - IP Address: %s\n\n", inet_ntoa(*((struct in_addr *)h->h_addr)));
+
+     socketfd = createSocket(inet_ntoa(*((struct in_addr *)h->h_addr)), SERVER_PORT);
+     readResponse(socketfd, responseCode);
+
+     if (responseCode[0] == '2') {
+          printf(" > Connection Established\n");
+     }
+
+     printf(" > Sending Username\n");
+     int res = sendCommandInterpretResponse(socketfd, "user ", user, filename, socketfdClient);
+
+     if (res == 1) {
+          printf(" > Sending Password\n");
+          res = sendCommandInterpretResponse(socketfd, "pass ", pass, filename, socketfdClient);
+     }
+
+     write(socketfd, "pasv\n", 5);
+     int serverPort = getServerPortFromResponse(socketfd);
+
+     socketfdClient = createSocket(inet_ntoa(*((struct in_addr *)h->h_addr)), serverPort);
+     printf("\n > Sending Retr\n");
+
+     int resRetr = sendCommandInterpretResponse(socketfd, "retr ", path, filename, socketfdClient);
+
+     if (resRetr == 0) {
+          close(socketfdClient);
+          close(socketfd);
+          exit(0);
+     } else {
+          printf(" > ERROR in RETR response\n");
+     }
+
+     close(socketfdClient);
+     close(socketfd);
+     exit(1);
 }
 
 int createSocket(char *ip, int port) { // copied from given code
@@ -148,59 +200,59 @@ struct hostent *getHostInfo(const char host[]) {
 }
 
 void parseArgument(char *argument, char *user, char *pass, char *host, char *path) {
-    char start[] = "ftp://";
-    int index = 0;
-    int i = 0;
-    int state = 0;
-    int length = strlen(argument);
+     char start[] = "ftp://";
+     int index = 0;
+     int i = 0;
+     int state = 0;
+     int length = strlen(argument);
 
-    while (i < length) {
-        switch (state) {
-        case 0: // reads the ftp://
-            if (argument[i] == start[i] && i < 5) {
-                break;
-            }
-            if (i == 5 && argument[i] == start[i])
-                state = 1;
-            else
-                printf(" > Error parsing ftp://");
-            break;
-        case 1: // reads the username
-            if (argument[i] == ':') {
-                state = 2;
-                index = 0;
-            } else {
-                user[index] = argument[i];
-                index++;
-            }
-            break;
-        case 2: // reads the password
-            if (argument[i] == '@') {
-                state = 3;
-                index = 0;
-            } else {
-                pass[index] = argument[i];
-                index++;
-            }
-            break;
-        case 3: // reads the host
-            if (argument[i] == '/') {
-                state = 4;
-                index = 0;
-            } else {
-                host[index] = argument[i];
-                index++;
-            }
-            break;
-        case 4: // reads the path
-            path[index] = argument[i];
-            index++;
-            break;
-        }
+     while (i < length) {
+          switch (state) {
+          case 0: // reads the ftp://
+               if (argument[i] == start[i] && i < 5) {
+                    break;
+               }
+               if (i == 5 && argument[i] == start[i])
+                    state = 1;
+               else
+                    printf(" > Error parsing ftp://");
+               break;
+          case 1: // reads the username
+               if (argument[i] == ':') {
+                    state = 2;
+                    index = 0;
+               } else {
+                    user[index] = argument[i];
+                    index++;
+               }
+               break;
+          case 2: // reads the password
+               if (argument[i] == '@') {
+                    state = 3;
+                    index = 0;
+               } else {
+                    pass[index] = argument[i];
+                    index++;
+               }
+               break;
+          case 3: // reads the host
+               if (argument[i] == '/') {
+                    state = 4;
+                    index = 0;
+               } else {
+                    host[index] = argument[i];
+                    index++;
+               }
+               break;
+          case 4: // reads the path
+               path[index] = argument[i];
+               index++;
+               break;
+          }
 
-        i++;
-    }
-    printf(" > Exiting parseArgument\n");
+          i++;
+     }
+     printf(" > Exiting parseArgument\n");
 }
 
 

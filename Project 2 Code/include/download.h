@@ -1,3 +1,6 @@
+#ifndef DOWNLOAD_H
+#define DOWNLOAD_H
+
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -28,3 +31,7 @@ int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]
 int getServerPortFromResponse(int socketfd); // TODO
 
 void parseFilename(char *path, char *filename);
+
+int createSocket(char *ip, int port);
+
+#endif /* DOWNLOAD_H */
