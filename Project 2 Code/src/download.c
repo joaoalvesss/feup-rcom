@@ -1,5 +1,23 @@
-#include "include/download.h"
+#include "../include/download.h"
 
+/**
+ * The struct hostent (host entry) with its terms documented
+
+    struct hostent {
+        char *h_name;    // Official name of the host.
+        char **h_aliases;    // A NULL-terminated array of alternate names for the host.
+        int h_addrtype;    // The type of address being returned; usually AF_INET.
+        int h_length;    // The length of the address in bytes.
+        char **h_addr_list;    // A zero-terminated array of network addresses for the host.
+        // Host addresses are in Network Byte Order.
+    };
+
+    #define h_addr h_addr_list[0]	The first address in h_addr_list.
+*/
+
+int main(int argc, char **argv){
+     return 0;
+}
 
 int createSocket(char *ip, int port) { // copied from given code
      int sockfd;
@@ -87,7 +105,6 @@ void getFile(const int socket, char *filename) {
           bytes_num = read(socket, buffer, MAX_SIZE);
           if (bytes_num > 0 && fwrite(buffer, bytes_num, 1, fd) < 0) {
                fclose(fd);
-               return -1;
           }
      }
 
@@ -95,7 +112,7 @@ void getFile(const int socket, char *filename) {
      printf(" > Exiting getFile\n");
 }
 
-void parseFilename(const char *path, char *filename){
+void parseFilename(char *path, char *filename){
      int indexFilename = 0;
      size_t pathLength = strlen(path);
 
@@ -184,4 +201,107 @@ void parseArgument(char *argument, char *user, char *pass, char *host, char *pat
         i++;
     }
     printf(" > Exiting parseArgument\n");
+}
+
+
+int getServerPortFromResponse(int socketfd) {
+     int state = 0;
+     int index = 0;
+     char firstByte[4] = {0};  // Initialize with zeros
+     char secondByte[4] = {0}; // Initialize with zeros
+     char current;
+
+     while (state != 7) {
+          read(socketfd, &current, 1);
+          printf("%c", current);
+
+          switch (state) {
+          case 0:
+               // Waits for 3 digit number followed by ' '
+               if (current == ' ') {
+                    if (index != 3) {
+                         printf(" > Error receiving response code\n");
+                         return -1;
+                    }
+                    index = 0;
+                    state = 1;
+               } else {
+                    index++;
+               }
+               break;
+          case 5:
+               // Reads until the first comma, extracting the first byte of the port
+               if (current == ',') {
+                    index = 0;
+                    state++;
+               } else {
+                    firstByte[index++] = current;
+               }
+               break;
+          case 6:
+               // Reads until the closing parenthesis, extracting the second byte of the port
+               if (current == ')') {
+                    state++;
+               } else {
+                    secondByte[index++] = current;
+               }
+               break;
+          default:
+               // Reads until the first comma
+               if (current == ',') {
+                    state++;
+               }
+               break;
+          }
+     }
+
+     // Converts the extracted bytes to integers and returns the calculated port
+     int firstByteInt = atoi(firstByte);
+     int secondByteInt = atoi(secondByte);
+     return (firstByteInt * 256 + secondByteInt);
+}
+
+
+int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[], char* filename, int socketfdClient) {
+     char responseCode[3];
+     int action = 0;
+
+     // sends the command
+     write(socketfd, cmd, strlen(cmd));
+     write(socketfd, commandContent, strlen(commandContent));
+     write(socketfd, "\n", 1);
+
+     while (1) {
+          // reads response
+          readResponse(socketfd, responseCode);
+          action = responseCode[0] - '0';
+
+          switch (action) {
+          case 1:
+               // wait for response
+               if (strcmp(cmd, "retr ") == 0) {
+                    getFile(socketfdClient, filename);
+                    break;
+               }
+               readResponse(socketfd, responseCode);
+               break;
+          case 2:
+               // command accepted
+               return 0;
+          case 3:
+               // needs more info
+               return 1;
+          case 4:
+               // try again
+               write(socketfd, cmd, strlen(cmd));
+               write(socketfd, commandContent, strlen(commandContent));
+               write(socketfd, "\r\n", 2);
+               break;
+          case 5:
+               // command rejected, exit
+               printf(" > Command rejected\n");
+               close(socketfd);
+               exit(-1);
+          }
+     }
 }

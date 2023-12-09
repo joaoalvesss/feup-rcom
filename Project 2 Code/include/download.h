@@ -17,9 +17,9 @@
 
 void readResponse(int socketfd, char *responseCode);
 
-struct hostent *getHostInfo(char host[]);
+struct hostent *getHostInfo(const char host[]);
 
-void getFile(const int socket, char* filename);
+void getFile(int socket, char* filename);
 
 void parseArgument(char *argument, char *user, char *pass, char *host, char *path);
 
