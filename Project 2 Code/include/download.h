@@ -9,21 +9,23 @@
 #include <regex.h>
 #include <termios.h>
 
-#define MAX_LENGTH  500
-#define SERVER_PORT    21
+#define MAX_SIZE        1000
+#define SERVER_PORT     21
 
-/* Server responses */
-#define SV_READY4AUTH           220
-#define SV_READY4PASS           331
-#define SV_LOGINSUCCESS         230
-#define SV_PASSIVE              227
-#define SV_READY4TRANSFER       150
-#define SV_TRANSFER_COMPLETE    226
-#define SV_GOODBYE              221
+// https://datatracker.ietf.org/doc/html/rfc959
+// PAG 39 - 42
+// like hmtl response codes
+// maybe need some more
+#define FTP_FILE_STATUS_OKAY          150  // File status okay; about to open data connection
+#define FTP_SERVICE_READY             220  // Service ready for new user
+#define FTP_SERVICE_CLOSING           221  // Service closing control connection
+#define FTP_CLOSING_DATA_CONNECTION   226  // Closing data connection
+#define FTP_ENTERING_PASSIVE_MODE     227  // Entering Passive Mode (h1,h2,h3,h4,p1,p2)
+#define FTP_USER_LOGGED_IN            230  // User logged in, proceed
+#define FTP_USER_NAME_OKAY            331  // User name okay, need password
+
 
 /* Parser regular expressions */
-#define AT              "@"
-#define BAR             "/"
 #define HOST_REGEX      "%*[^/]//%[^/]"
 #define HOST_AT_REGEX   "%*[^/]//%*[^@]@%[^/]"
 #define RESOURCE_REGEX  "%*[^/]//%*[^/]/%s"
@@ -32,39 +34,20 @@
 #define RESPCODE_REGEX  "%d"
 #define PASSIVE_REGEX   "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]"
 
-/* Default login for case 'ftp://<host>/<url-path>' */
-#define DEFAULT_USER        "anonymous"
-#define DEFAULT_PASSWORD    "password"
-
-
 struct URL {
-    char host[MAX_LENGTH];      // 'ftp.up.pt'
-    char resource[MAX_LENGTH];  // 'parrot/misc/canary/warrant-canary-0.txt'
-    char file[MAX_LENGTH];      // 'warrant-canary-0.txt'
-    char user[MAX_LENGTH];      // 'username'
-    char password[MAX_LENGTH];  // 'password'
-    char ip[MAX_LENGTH];        // 193.137.29.15
+    char host[MAX_SIZE];      
+    char resource[MAX_SIZE]; 
+    char file[MAX_SIZE];     
+    char user[MAX_SIZE];      
+    char password[MAX_SIZE]; 
+    char ip[MAX_SIZE];        
 };
 
-typedef enum {
-    START,
-    SINGLE,
-    MULTIPLE,
-    END
-} ResponseState;
-
 int parse(char *input, struct URL *url);
-
 int createSocket(char *ip, int port);
-
 int authConn(const int socket, const char *user, const char *pass);
-
 int readResponse(const int socket, char *buffer);
-
 int passiveMode(const int socket, char* ip, int *port);
-
 int requestResource(const int socket, char *resource);
-
 int getResource(const int socketA, const int socketB, char *filename);
-
 int closeConnection(const int socketA, const int socketB);
