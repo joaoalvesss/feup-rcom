@@ -1,35 +1,35 @@
 #include "../include/download.h"
 
 void parseURLWithoutUserInfo(char *input, struct URL *url) {
-    sscanf(input, HOST_REGEX, url->host);
+    sscanf(input, "%*[^/]//%[^/]", url->host);
     strcpy(url->user, "anonymous");
     strcpy(url->password, "password");
-    sscanf(input, RESOURCE_REGEX, url->resource);
+    sscanf(input, "%*[^/]//%*[^/]/%s", url->resource);
     strcpy(url->file, strrchr(input, '/') + 1);
 }
 
 void parseURLWithUserInfo(char *input, struct URL *url) {
-    sscanf(input, HOST_AT_REGEX, url->host);
-    sscanf(input, USER_REGEX, url->user);
-    sscanf(input, PASS_REGEX, url->password);
-    sscanf(input, RESOURCE_REGEX, url->resource);
+    sscanf(input, "%*[^/]//%*[^@]@%[^/]", url->host);
+    sscanf(input, "%*[^/]//%[^:/]", url->user);
+    sscanf(input, "%*[^/]//%*[^:]:%[^@\n$]", url->password);
+    sscanf(input, "%*[^/]//%*[^/]/%s", url->resource);
     strcpy(url->file, strrchr(input, '/') + 1);
 }
 
-int parse(char *input, struct URL *url) {
+int parseURL(char *input, struct URL *url) {
      regex_t barRegex, atRegex;
      regcomp(&barRegex, "/", 0);
-     if (regexec(&barRegex, input, 0, NULL, 0)) return -1;
+     if (regexec(&barRegex, input, 0, NULL, 0)) 
+     return -1;
 
      regcomp(&atRegex, "@", 0);
-     if (regexec(&atRegex, input, 0, NULL, 0) != 0) {
+     if (regexec(&atRegex, input, 0, NULL, 0) != 0)
           parseURLWithoutUserInfo(input, url);
-     } 
+
      else {
           parseURLWithUserInfo(input, url);
-          if (strlen(url->user) == 0) {
+          if (strlen(url->user) == 0)
                strcpy(url->user, "anonymous");
-          }
      }
 
      struct hostent *h;
@@ -44,7 +44,7 @@ int parse(char *input, struct URL *url) {
 }
 
 // 100% copied from given code, cannot be wrong
-int createSocket(char *ip, int port) { 
+int createAndConnectSocket(char *ip, int port) { 
      int sockfd;
      struct sockaddr_in server_addr;
 
@@ -67,7 +67,7 @@ int createSocket(char *ip, int port) {
      return sockfd;
 }
 
-int authConn(const int socket, const char *user, const char *pass) {
+int authenticateConnection(const int socket, const char *user, const char *pass){
     char userCommand[MAX_SIZE];
     char passCommand[MAX_SIZE];
     char answer[MAX_SIZE];
@@ -77,32 +77,31 @@ int authConn(const int socket, const char *user, const char *pass) {
 
     write(socket, userCommand, strlen(userCommand));
     
-    if (readResponse(socket, answer) != FTP_USER_NAME_OKAY) {
+    if (readFTPServerResponse(socket, answer) != FTP_USER_NAME_OKAY) {
         printf(" > Error finding user");
         exit(EXIT_FAILURE);
     }
 
     write(socket, passCommand, strlen(passCommand));
-    return readResponse(socket, answer);
+    return readFTPServerResponse(socket, answer);
 }
 
-int passiveMode(const int socket, char *ip, int *port) {
+int enterPassiveMode(const int socket, char *ip, int *port){
     char answer[MAX_SIZE];
     int ip1, ip2, ip3, ip4, port1, port2;
 
     write(socket, "pasv\n", 5);
-    if (readResponse(socket, answer) != FTP_ENTERING_PASSIVE_MODE) {
+    if (readFTPServerResponse(socket, answer) != FTP_ENTERING_PASSIVE_MODE)
         return -1;
-    }
 
-    sscanf(answer, PASSIVE_REGEX, &ip1, &ip2, &ip3, &ip4, &port1, &port2);
+    sscanf(answer, "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
     *port = port1 * 256 + port2;
     snprintf(ip, MAX_SIZE, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
 
     return FTP_ENTERING_PASSIVE_MODE;
 }
 
-int readResponse(const int socket, char *buffer) {
+int readFTPServerResponse(const int socket, char *buffer){
     char byte;
     int index = 0, responseCode, state = 0;
 
@@ -137,54 +136,51 @@ int readResponse(const int socket, char *buffer) {
         }
     }
 
-    sscanf(buffer, RESPCODE_REGEX, &responseCode);
+    sscanf(buffer, "%d", &responseCode);
     return responseCode;
 }
 
+int requestFTPResource(const int socket, char *resource){
+     char answer[MAX_SIZE], fileCommand[5 + strlen(resource) + 1];
 
+     sprintf(fileCommand, "retr %s\n", resource);
 
-int requestResource(const int socket, char *resource) {
-    char fileCommand[5 + strlen(resource) + 1], answer[MAX_SIZE];
-
-    sprintf(fileCommand, "retr %s\n", resource);
-
-    write(socket, fileCommand, strlen(fileCommand));
-
-    return readResponse(socket, answer);
+     write(socket, fileCommand, strlen(fileCommand));
+          
+     return readFTPServerResponse(socket, answer);
 }
 
-int getResource(const int socketA, const int socketB, char *filename) {
-    FILE *fd = fopen(filename, "wb");
+int getFTPResource(const int controlSocket, const int dataSocket, char *filename) {
+    FILE *fd = fopen(filename, "wb+");
+
     if (fd == NULL) {
-        printf(" > Error opening or creating file '%s'\n", filename);
+        printf(" > Error opening file\n");
         exit(-1);
     }
 
     char buffer[MAX_SIZE];
-    int bytes;
+    int bytes = 1;
 
-    do {
-        bytes = read(socketB, buffer, MAX_SIZE);
-        if (bytes > 0 && fwrite(buffer, bytes, 1, fd) < 0) {
+    while (bytes > 0){
+        bytes = read(dataSocket, buffer, MAX_SIZE);
+        if (bytes > 0 && fwrite(buffer, bytes, 1, fd) < 0){
             fclose(fd);
             return -1;
         }
-    } while (bytes);
-
-    fclose(fd);
-
-    return readResponse(socketA, buffer);
-}
-
-int closeConnection(const int socketA, const int socketB) {
-    char answer[MAX_SIZE];
-
-    write(socketA, "quit\n", 5);
-    if (readResponse(socketA, answer) != FTP_SERVICE_CLOSING) {
-        return -1;
     }
 
-    return close(socketA) || close(socketB);
+    fclose(fd);
+    return readFTPServerResponse(controlSocket, buffer);
+}
+
+int closeFTPConnection(const int controlSocket, const int dataSocket){
+     char answer[MAX_SIZE];
+
+     write(controlSocket, "quit\n", 5);
+     if (readFTPServerResponse(controlSocket, answer) != FTP_SERVICE_CLOSING) 
+     return -1;
+
+     return close(controlSocket) || close(dataSocket);
 }
 
 void printURLInfo(const struct URL *url) {
@@ -210,36 +206,35 @@ int main(int argc, char *argv[]) {
           
      memset(&url, 0, sizeof(url));
 
-     if (argc != 2)
+     if(argc != 2)
           printError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
 
-     if (parse(argv[1], &url) != 0)
+     if(parseURL(argv[1], &url) != 0)
           printError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
      
      printURLInfo(&url);
 
-     int socketA = createSocket(url.ip, SERVER_PORT);
-     if (socketA < 0 || readResponse(socketA, answer) != FTP_SERVICE_READY)
+     int socketA = createAndConnectSocket(url.ip, SERVER_PORT);
+     if(socketA < 0 || readFTPServerResponse(socketA, answer) != FTP_SERVICE_READY)
           printSocketError("control connection", url.ip, SERVER_PORT);
 
-     
-     if (authConn(socketA, url.user, url.password) != FTP_USER_LOGGED_IN)
+     if(authenticateConnection(socketA, url.user, url.password) != FTP_USER_LOGGED_IN)
           printError("Authentication failed");
      
-     if (passiveMode(socketA, ip, &port) != FTP_ENTERING_PASSIVE_MODE)
+     if(enterPassiveMode(socketA, ip, &port) != FTP_ENTERING_PASSIVE_MODE)
           printError("Passive mode failed");
 
-     int socketB = createSocket(ip, port);
-     if (socketB < 0)
+     int socketB = createAndConnectSocket(ip, port);
+     if(socketB < 0)
           printSocketError("data connection", ip, port);
 
-     if (requestResource(socketA, url.resource) != FTP_FILE_STATUS_OKAY)
+     if(requestFTPResource(socketA, url.resource) != FTP_FILE_STATUS_OKAY)
           printError("Unknown resource");
 
-     if (getResource(socketA, socketB, url.file) != FTP_CLOSING_DATA_CONNECTION) 
+     if(getFTPResource(socketA, socketB, url.file) != FTP_CLOSING_DATA_CONNECTION) 
           printError("Error transferring file");
 
-     if (closeConnection(socketA, socketB) != 0) 
+     if(closeFTPConnection(socketA, socketB) != 0) 
           printError("Sockets close error");
 
      printf(" > File downloaded!\n");

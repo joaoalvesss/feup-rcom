@@ -15,7 +15,7 @@
 // https://datatracker.ietf.org/doc/html/rfc959
 // PAG 39 - 42
 // like hmtl response codes
-// maybe need some more
+// maybe need some more (?)
 #define FTP_FILE_STATUS_OKAY          150  // File status okay; about to open data connection
 #define FTP_SERVICE_READY             220  // Service ready for new user
 #define FTP_SERVICE_CLOSING           221  // Service closing control connection
@@ -23,16 +23,6 @@
 #define FTP_ENTERING_PASSIVE_MODE     227  // Entering Passive Mode (h1,h2,h3,h4,p1,p2)
 #define FTP_USER_LOGGED_IN            230  // User logged in, proceed
 #define FTP_USER_NAME_OKAY            331  // User name okay, need password
-
-
-/* Parser regular expressions */
-#define HOST_REGEX      "%*[^/]//%[^/]"
-#define HOST_AT_REGEX   "%*[^/]//%*[^@]@%[^/]"
-#define RESOURCE_REGEX  "%*[^/]//%*[^/]/%s"
-#define USER_REGEX      "%*[^/]//%[^:/]"
-#define PASS_REGEX      "%*[^/]//%*[^:]:%[^@\n$]"
-#define RESPCODE_REGEX  "%d"
-#define PASSIVE_REGEX   "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]"
 
 struct URL {
     char host[MAX_SIZE];      
@@ -43,11 +33,23 @@ struct URL {
     char ip[MAX_SIZE];        
 };
 
-int parse(char *input, struct URL *url);
-int createSocket(char *ip, int port);
-int authConn(const int socket, const char *user, const char *pass);
-int readResponse(const int socket, char *buffer);
-int passiveMode(const int socket, char* ip, int *port);
-int requestResource(const int socket, char *resource);
-int getResource(const int socketA, const int socketB, char *filename);
-int closeConnection(const int socketA, const int socketB);
+
+/***** Main functions *****/ 
+
+int readFTPServerResponse(const int socket, char *buffer);
+int requestFTPResource(const int socket, char *resource);
+int authenticateConnection(const int socket, const char *user, const char *pass);
+int createAndConnectSocket(char *ip, int port);
+int getFTPResource(const int controlSocket, const int dataSocket, char *filename);
+int closeFTPConnection(const int controlSocket, const int dataSocket);
+int parseURL(char *input, struct URL *url);
+int enterPassiveMode(const int socket, char *ip, int *port);
+
+
+/***** Auxiliary functions *****/ 
+
+void printURLInfo(const struct URL *url);
+void printSocketError(const char *destination, const char *ip, int port);
+void printError(const char *message);
+void parseURLWithUserInfo(char *input, struct URL *url);
+void parseURLWithoutUserInfo(char *input, struct URL *url);
