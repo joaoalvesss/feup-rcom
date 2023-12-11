@@ -19,13 +19,10 @@ void parseURLWithUserInfo(char *input, struct URL *url) {
 int parseURL(char *input, struct URL *url) {
      regex_t barRegex, atRegex;
      regcomp(&barRegex, "/", 0);
-     if (regexec(&barRegex, input, 0, NULL, 0)) 
-     return -1;
+     if (regexec(&barRegex, input, 0, NULL, 0)) return -1;
 
      regcomp(&atRegex, "@", 0);
-     if (regexec(&atRegex, input, 0, NULL, 0) != 0)
-          parseURLWithoutUserInfo(input, url);
-
+     if (regexec(&atRegex, input, 0, NULL, 0) != 0) parseURLWithoutUserInfo(input, url);
      else {
           parseURLWithUserInfo(input, url);
           if (strlen(url->user) == 0)
@@ -91,8 +88,7 @@ int enterPassiveMode(const int socket, char *ip, int *port){
     int ip1, ip2, ip3, ip4, port1, port2;
 
     write(socket, "pasv\n", 5);
-    if (readFTPServerResponse(socket, answer) != FTP_ENTERING_PASSIVE_MODE)
-        return -1;
+    if (readFTPServerResponse(socket, answer) != FTP_ENTERING_PASSIVE_MODE) return -1;
 
     sscanf(answer, "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
     *port = port1 * 256 + port2;
@@ -109,30 +105,23 @@ int readFTPServerResponse(const int socket, char *buffer){
 
     while (state != 3) {
         read(socket, &byte, 1);
-        switch (state) {
-               case 0:
-                    if (byte == ' ') state = 1;
-                    else if (byte == '-') state = 2;
-                    else if (byte == '\n') state = 3;
-                    else buffer[index++] = byte;
-                    break;
-               case 1:
-                    if (byte == '\n') state = 3;
-                    else buffer[index++] = byte;
-                    break;
-               case 2:
-                    if (byte == '\n') {
-                         memset(buffer, 0, MAX_SIZE);
-                         state = 0;
-                         index = 0;
-                    } 
-                    else
-                         buffer[index++] = byte;
-               break;
-               case 3:
-                    break;
-               default:
-                    break;
+        if (state == 0) {
+               if (byte == ' ') state = 1;
+               else if (byte == '-') state = 2;
+               else if (byte == '\n') state = 3;
+               else buffer[index++] = byte;
+        }
+        else if (state == 1) {
+               if (byte == '\n') state = 3;
+               else buffer[index++] = byte;
+        }
+        else if (state == 2) {
+               if (byte == '\n') {
+                    memset(buffer, 0, MAX_SIZE);
+                    state = 0;
+                    index = 0;
+               } 
+               else buffer[index++] = byte;
         }
     }
 
@@ -142,11 +131,8 @@ int readFTPServerResponse(const int socket, char *buffer){
 
 int requestFTPResource(const int socket, char *resource){
      char answer[MAX_SIZE], fileCommand[5 + strlen(resource) + 1];
-
      sprintf(fileCommand, "retr %s\n", resource);
-
-     write(socket, fileCommand, strlen(fileCommand));
-          
+     write(socket, fileCommand, strlen(fileCommand));          
      return readFTPServerResponse(socket, answer);
 }
 
@@ -163,7 +149,7 @@ int getFTPResource(const int controlSocket, const int dataSocket, char *filename
 
     while (bytes > 0){
         bytes = read(dataSocket, buffer, MAX_SIZE);
-        if (bytes > 0 && fwrite(buffer, bytes, 1, fd) < 0){
+        if (bytes > 0 && fwrite(buffer, bytes, 1, fd) < 0) {
             fclose(fd);
             return -1;
         }
@@ -177,8 +163,7 @@ int closeFTPConnection(const int controlSocket, const int dataSocket){
      char answer[MAX_SIZE];
 
      write(controlSocket, "quit\n", 5);
-     if (readFTPServerResponse(controlSocket, answer) != FTP_SERVICE_CLOSING) 
-     return -1;
+     if (readFTPServerResponse(controlSocket, answer) != FTP_SERVICE_CLOSING) return -1;
 
      return close(controlSocket) || close(dataSocket);
 }
@@ -206,36 +191,27 @@ int main(int argc, char *argv[]) {
           
      memset(&url, 0, sizeof(url));
 
-     if(argc != 2)
-          printError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
+     if (argc != 2) printError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
 
-     if(parseURL(argv[1], &url) != 0)
-          printError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
+     if (parseURL(argv[1], &url) != 0) printError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
      
      printURLInfo(&url);
 
      int socketA = createAndConnectSocket(url.ip, SERVER_PORT);
-     if(socketA < 0 || readFTPServerResponse(socketA, answer) != FTP_SERVICE_READY)
-          printSocketError("control connection", url.ip, SERVER_PORT);
+     if (socketA < 0 || readFTPServerResponse(socketA, answer) != FTP_SERVICE_READY) printSocketError("control connection", url.ip, SERVER_PORT);
 
-     if(authenticateConnection(socketA, url.user, url.password) != FTP_USER_LOGGED_IN)
-          printError("Authentication failed");
+     if (authenticateConnection(socketA, url.user, url.password) != FTP_USER_LOGGED_IN) printError("Authentication failed");
      
-     if(enterPassiveMode(socketA, ip, &port) != FTP_ENTERING_PASSIVE_MODE)
-          printError("Passive mode failed");
+     if (enterPassiveMode(socketA, ip, &port) != FTP_ENTERING_PASSIVE_MODE) printError("Passive mode failed");
 
      int socketB = createAndConnectSocket(ip, port);
-     if(socketB < 0)
-          printSocketError("data connection", ip, port);
+     if (socketB < 0) printSocketError("data connection", ip, port);
 
-     if(requestFTPResource(socketA, url.resource) != FTP_FILE_STATUS_OKAY)
-          printError("Unknown resource");
+     if (requestFTPResource(socketA, url.resource) != FTP_FILE_STATUS_OKAY) printError("Unknown resource");
 
-     if(getFTPResource(socketA, socketB, url.file) != FTP_CLOSING_DATA_CONNECTION) 
-          printError("Error transferring file");
+     if (getFTPResource(socketA, socketB, url.file) != FTP_CLOSING_DATA_CONNECTION) printError("Error transferring file");
 
-     if(closeFTPConnection(socketA, socketB) != 0) 
-          printError("Sockets close error");
+     if (closeFTPConnection(socketA, socketB) != 0) printError("Sockets close error");
 
      printf(" > File downloaded!\n");
      return 0;
