@@ -83,20 +83,6 @@ int authenticateConnection(const int socket, const char *user, const char *pass)
     return readFTPServerResponse(socket, answer);
 }
 
-int enterPassiveMode(const int socket, char *ip, int *port){
-    char answer[MAX_SIZE];
-    int ip1, ip2, ip3, ip4, port1, port2;
-
-    write(socket, "pasv\n", 5);
-    if (readFTPServerResponse(socket, answer) != FTP_ENTERING_PASSIVE_MODE) return -1;
-
-    sscanf(answer, "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
-    *port = port1 * 256 + port2;
-    snprintf(ip, MAX_SIZE, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
-
-    return FTP_ENTERING_PASSIVE_MODE;
-}
-
 int readFTPServerResponse(const int socket, char *buffer){
     char byte;
     int index = 0, responseCode, state = 0;
@@ -136,6 +122,34 @@ int requestFTPResource(const int socket, char *resource){
      return readFTPServerResponse(socket, answer);
 }
 
+int enterPassiveMode(const int socket, char *ip, int *port) {
+    char answer[MAX_SIZE];
+    int ip1, ip2, ip3, ip4, port1, port2;
+    write(socket, "pasv\n", 5);
+    if (readFTPServerResponse(socket, answer) != 227) return -1;
+
+    sscanf(answer, "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
+    *port = port1 * 256 + port2;
+    sprintf(ip, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
+
+    return 227;
+}
+
+void enter_passive_mode(int sockfd, char* ip, int* port){
+  char response[MAX_SIZE];
+
+  if(write(sockfd, "PASV\r\n", response, 1) != 0){
+    fprintf(stderr, "Error entering passive mode. Exiting...\n");
+    exit(1);
+  }
+
+  int values[6];
+  char* data = strchr(response, '(');
+  sscanf(data, "(%d, %d, %d, %d, %d, %d)", &values[0],&values[1],&values[2],&values[3],&values[4],&values[5]);
+  sprintf(ip, "%d.%d.%d.%d", values[0],values[1],values[2],values[3]);
+  *port = values[4]*256+values[5];
+}
+
 int getFTPResource(const int controlSocket, const int dataSocket, char *filename) {
     FILE *fd = fopen(filename, "wb+");
 
@@ -160,12 +174,13 @@ int getFTPResource(const int controlSocket, const int dataSocket, char *filename
 }
 
 int closeFTPConnection(const int controlSocket, const int dataSocket){
-     char answer[MAX_SIZE];
+    char answer[MAX_SIZE];
 
-     write(controlSocket, "quit\n", 5);
-     if (readFTPServerResponse(controlSocket, answer) != FTP_SERVICE_CLOSING) return -1;
+    write(controlSocket, "quit\n", 5);
+    if (readFTPServerResponse(controlSocket, answer) != 221) 
+        return -1;
 
-     return close(controlSocket) || close(dataSocket);
+    return close(controlSocket) || close(dataSocket);
 }
 
 void printURLInfo(const struct URL *url) {
@@ -184,35 +199,45 @@ void printError(const char *message) {
 }
 
 int main(int argc, char *argv[]) {
-     int port;
-     char ip[MAX_SIZE];
-     char answer[MAX_SIZE];
-     struct URL url;
-          
-     memset(&url, 0, sizeof(url));
+    int port;
+    char ip[MAX_SIZE];
+    char answer[MAX_SIZE];
+    struct URL url;
+    
+    memset(&url, 0, sizeof(url));
 
-     if (argc != 2) printError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
+    if (argc != 2) 
+        printError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
 
-     if (parseURL(argv[1], &url) != 0) printError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
+    if (parseURL(argv[1], &url) != 0) 
+        printError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
      
-     printURLInfo(&url);
+    printURLInfo(&url);
 
-     int socketA = createAndConnectSocket(url.ip, SERVER_PORT);
-     if (socketA < 0 || readFTPServerResponse(socketA, answer) != FTP_SERVICE_READY) printSocketError("control connection", url.ip, SERVER_PORT);
+    int socketA = createAndConnectSocket(url.ip, SERVER_PORT);
 
-     if (authenticateConnection(socketA, url.user, url.password) != FTP_USER_LOGGED_IN) printError("Authentication failed");
+    if (socketA < 0 || readFTPServerResponse(socketA, answer) != 220) 
+        printSocketError("control connection", url.ip, SERVER_PORT);
+
+    if (authenticateConnection(socketA, url.user, url.password) != 230) 
+        printError("Authentication failed");
      
-     if (enterPassiveMode(socketA, ip, &port) != FTP_ENTERING_PASSIVE_MODE) printError("Passive mode failed");
+    if (enterPassiveMode(socketA, ip, &port) != 227) 
+        printError("Passive mode failed");
 
-     int socketB = createAndConnectSocket(ip, port);
-     if (socketB < 0) printSocketError("data connection", ip, port);
+    int socketB = createAndConnectSocket(ip, port);
 
-     if (requestFTPResource(socketA, url.resource) != FTP_FILE_STATUS_OKAY) printError("Unknown resource");
+    if (socketB < 0) printSocketError("data connection", ip, port);
 
-     if (getFTPResource(socketA, socketB, url.file) != FTP_CLOSING_DATA_CONNECTION) printError("Error transferring file");
+    if (requestFTPResource(socketA, url.resource) != 150) 
+        printError("Unknown resource");
 
-     if (closeFTPConnection(socketA, socketB) != 0) printError("Sockets close error");
+    if (getFTPResource(socketA, socketB, url.file) != 226) 
+        printError("Error transferring file");
 
-     printf(" > File downloaded!\n");
-     return 0;
+    if (closeFTPConnection(socketA, socketB) != 0) 
+        printError("Sockets close error");
+
+    printf(" > File downloaded!\n");
+    return 0;
 }

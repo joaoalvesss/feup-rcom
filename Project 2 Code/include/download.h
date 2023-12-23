@@ -25,13 +25,14 @@
 #define FTP_USER_NAME_OKAY            331  // User name okay, need password
 
 struct URL {
-    char host[MAX_SIZE];      
-    char resource[MAX_SIZE]; 
-    char file[MAX_SIZE];     
-    char user[MAX_SIZE];      
-    char password[MAX_SIZE]; 
-    char ip[MAX_SIZE];        
+    char user[256];
+    char password[256];
+    char host[256];
+    char resource[256];
+    char file[256];
+    char ip[256];
 };
+
 
 
 /***** Main functions *****/ 
@@ -42,7 +43,7 @@ int authenticateConnection(const int socket, const char *user, const char *pass)
 int createAndConnectSocket(char *ip, int port);
 int getFTPResource(const int controlSocket, const int dataSocket, char *filename);
 int closeFTPConnection(const int controlSocket, const int dataSocket);
-int parseURL(char *input, struct URL *url);
+int parseURL(char *input, char *user, char *password, char *host, char *resource, char *file, char *ip);
 int enterPassiveMode(const int socket, char *ip, int *port);
 
 
@@ -51,5 +52,5 @@ int enterPassiveMode(const int socket, char *ip, int *port);
 void printURLInfo(const struct URL *url);
 void printSocketError(const char *destination, const char *ip, int port);
 void printError(const char *message);
-void parseURLWithUserInfo(char *input, struct URL *url);
-void parseURLWithoutUserInfo(char *input, struct URL *url);
+void parseURLWithUserInfo(char *input, char *host, char *user, char *password, char *resource, char *file);
+void parseURLWithoutUserInfo(char *input, char *host, char *user, char *password, char *resource, char *file);
